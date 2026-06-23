@@ -1,76 +1,20 @@
-/// ==========================================
-// CONFIGURATIONS & JSON DATA
-// ==========================================
-// ==========================================
-// CONFIGURATIONS & JSON DATA
-// ==========================================
-window.ShopConfig = {
-    skins: [
-        { id: 'default', name: 'Red Cube', price: 0, isDefault: true, scale: 1 },
-        { id: 'skin_ninja', name: 'Ninja Skin', price: 500, scale: 0.15, dirs: ['assets/skins/n_up.png', 'assets/skins/n_right.png', 'assets/skins/n_down.png', 'assets/skins/n_left.png'] },
-        { id: 'skin_popstar', name: 'Popstar', price: 1500, scale: 0.15, dirs: [] }, // דוגמה לפריטים נוספים
-        { id: 'skin_robot', name: 'Mecha Suit', price: 2000, scale: 0.15, dirs: [] }
-    ],
-    packs: [
-        { id: 'default', name: 'Lush Forest', price: 0, isDefault: true,
-          biome: { floor: '#8BC34A', floorDark: '#5D4037', wall: '#795548', wallDark: '#5D4037', trap: '#29B6F6', trapDark: '#0288D1' }
-        },
-        { id: 'pack_desert', name: 'Desert Theme', price: 2500, 
-          biome: { floor: '#E0C097', floorDark: '#C89F70', wall: '#B87333', wallDark: '#8A5A2B', trap: '#FFCC80', trapDark: '#F57C00' },
-          textures: { floor: 'assets/packs/desert_floor.png', wall: 'assets/packs/desert_wall.png' } 
-        },
-        { id: 'pack_neon', name: 'Cyberpunk', price: 3000, biome: { floor: '#000000', floorDark: '#111', wall: '#222', wallDark: '#000', trap: '#FF00FF', trapDark: '#880088' } }
-    ],
-    bgs: [
-        { id: 'default', name: 'Pink Dream', price: 0, isDefault: true, image: 'assets/images/bg_game.png', uiMain: 0xF8BBD0, uiDark: 0xC2185B },
-        { id: 'bg_space', name: 'Galaxy BG', price: 800, image: 'assets/images/bg_space.png', uiMain: 0x1a1a2e, uiDark: 0x0f3460 },
-        { id: 'bg_sunset', name: 'Sunset Vibe', price: 1200, image: 'assets/images/bg_sunset.png', uiMain: 0xFFB74D, uiDark: 0xE65100 }
-    ]
-};
-
 window.PlayerData = {
+    discordId: null, // הוספנו את ה-ID של דיסקורד!
     coins: 5000, 
     triesLeft: 5, maxTries: 5,
     unlockedSkins: ['default'], currentSkin: 'default',
     unlockedPacks: ['default'], currentPack: 'default',
     unlockedBGs: ['default'], currentBG: 'default',
-    lastSolvedLevel: -1 // שומר את השלב האחרון שניצחת כדי לנעול את כפתור הפליי!
+    lastSolvedLevel: -1
 };
 
-// מחשב את החנות הרנדומלית ומספר השלב לפי שעון BST!
-window.getDailyData = function() {
-    const now = new Date();
-    const bstOffsetMs = 1 * 60 * 60 * 1000; // BST = UTC + 1
-    const dayIndex = Math.floor((now.getTime() + bstOffsetMs) / 86400000); 
-
-    // מחולל מספרים אקראיים קבוע לאותו יום
-    const seededRandom = (seed) => { let x = Math.sin(seed++) * 10000; return x - Math.floor(x); };
-    
-    // בוחר עד 6 פריטים אקראיים מהמערך לפי היום
-    const getItems = (arr, maxCount, seedOffset) => {
-        let copy = [...arr];
-        for(let i = copy.length - 1; i > 0; i--) {
-            let j = Math.floor(seededRandom(dayIndex + seedOffset + i) * (i + 1));
-            [copy[i], copy[j]] = [copy[j], copy[i]];
-        }
-        return copy.slice(0, maxCount);
-    };
-
-    return {
-        levelNumber: dayIndex - 20600, // הופך את התאריך למספר שלב קריא (למשל שלב 45)
-        shop: {
-            bgs: getItems(window.ShopConfig.bgs, 6, 100),
-            packs: getItems(window.ShopConfig.packs, 6, 200),
-            skins: getItems(window.ShopConfig.skins, 6, 300)
-        }
-    };
-};
 
 // ==========================================
-// BOOT SCENE - LAZY LOADING
+// BOOT SCENE - DISCORD SDK & LAZY LOADING
 // ==========================================
 class BootScene extends Phaser.Scene {
     constructor() { super('BootScene'); }
+    
     preload() {
         this.load.image('tex_floor', 'assets/images/floor.png');         
         this.load.image('tex_wall', 'assets/images/wall.png');           
@@ -80,28 +24,80 @@ class BootScene extends Phaser.Scene {
         this.load.image('tex_crystal', 'assets/images/crystal.png');     
         this.load.image('tex_exit', 'assets/images/exit.png');           
         this.load.spritesheet('tex_water', 'assets/images/water_spritesheet.png', { frameWidth: 128, frameHeight: 128 });
-
-        // התיקון: טוען את הרקע הדיפולטיבי וגם את מה שנבחר במקביל כדי למנוע מסך שחור!
-        const defaultBG = window.ShopConfig.bgs.find(b => b.id === 'default');
+        
+        const defaultBG = window.OwnedAssets.bgs.find(b => b.id === 'default');
         this.load.image(defaultBG.id, defaultBG.image);
+    }
 
-        const currentBG = window.ShopConfig.bgs.find(b => b.id === window.PlayerData.currentBG);
-        if (currentBG && currentBG.id !== 'default' && currentBG.image) {
-            this.load.image(currentBG.id, currentBG.image);
-        }
+    async create() {
+        let comicFont = '"Comic Sans MS", "Chalkboard SE", "Marker Felt", sans-serif';
+        let loadingText = this.add.text(this.scale.width/2, this.scale.height/2, 'CONNECTING...', { fontFamily: comicFont, fontSize: '45px', fill: '#FFF', fontStyle: 'bold' }).setOrigin(0.5);
 
-        const currentSkin = window.ShopConfig.skins.find(s => s.id === window.PlayerData.currentSkin);
+        try {
+            const { DiscordSDK } = await import('https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@1.2.0/+esm');
+            const discordSdk = new DiscordSDK('1518734375934754816');
+            await discordSdk.ready();
+
+            const { code } = await discordSdk.commands.authorize({ client_id: '1518734375934754816', response_type: 'code', state: '', prompt: 'none', scope: ['identify'] });
+            
+            const response = await fetch('/api/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+            const { access_token } = await response.json();
+            
+            // 1. קודם כל שומרים את האסימון המאובטח
+            window.PlayerData.accessToken = `Bearer ${access_token}`;
+            const auth = await discordSdk.commands.authenticate({ access_token });
+
+            // 2. טעינת שם ותמונת פרופיל
+            window.PlayerData.username = auth.user.username;
+            window.PlayerData.avatarUrl = auth.user.avatar ? `https://cdn.discordapp.com/avatars/${auth.user.id}/${auth.user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/0.png`;
+
+            // משיכת כל הנתונים, החנות והנכסים מהשרת במכה אחת!
+            const initResponse = await fetch('/api/init', { 
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': window.PlayerData.accessToken }, body: JSON.stringify({}) 
+            });
+            const initData = await initResponse.json();
+
+            // שומרים את הכל למשחק
+            window.DailyData = initData.dailyData;
+            window.OwnedAssets = initData.ownedAssets; // רק הפריטים ששייכים לי!
+            
+            let dbPlayer = initData.player;
+            window.PlayerData.discordId = dbPlayer.discordId;
+            window.PlayerData.coins = dbPlayer.coins;
+            window.PlayerData.lastPlayedDay = dbPlayer.lastPlayedDay;
+            window.PlayerData.triesLeft = dbPlayer.triesLeft;
+            window.PlayerData.unlockedSkins = dbPlayer.unlockedSkins;
+            window.PlayerData.currentSkin = dbPlayer.currentSkin;
+            window.PlayerData.unlockedPacks = dbPlayer.unlockedPacks;
+            window.PlayerData.currentPack = dbPlayer.currentPack;
+            window.PlayerData.unlockedBGs = dbPlayer.unlockedBGs;
+            window.PlayerData.currentBG = dbPlayer.currentBG;
+            window.PlayerData.lastSolvedLevel = dbPlayer.lastSolvedLevel;
+
+        } catch (e) { console.log("Local Mode or Error:", e); }
+
+        loadingText.setText('LOADING ASSETS...');
+
+        if (window.PlayerData.avatarUrl) { this.load.image('discord_avatar', window.PlayerData.avatarUrl); }
+
+        // עכשיו הוא טוען תמונות רק מתוך מה שהוא מחזיק (OwnedAssets)
+        const currentBG = window.OwnedAssets.bgs.find(b => b.id === window.PlayerData.currentBG);
+        if (currentBG && currentBG.id !== 'default' && currentBG.image) { this.load.image(currentBG.id, currentBG.image); }
+        
+        const currentSkin = window.OwnedAssets.skins.find(s => s.id === window.PlayerData.currentSkin);
         if (currentSkin && !currentSkin.isDefault && currentSkin.dirs) {
             currentSkin.dirs.forEach((dirImg, index) => { this.load.image(`${currentSkin.id}_${index}`, dirImg); });
         }
 
-        const currentPack = window.ShopConfig.packs.find(p => p.id === window.PlayerData.currentPack);
+        const currentPack = window.OwnedAssets.packs.find(p => p.id === window.PlayerData.currentPack);
         if (currentPack && currentPack.textures) {
             if (currentPack.textures.floor) this.load.image('custom_floor', currentPack.textures.floor);
             if (currentPack.textures.wall) this.load.image('custom_wall', currentPack.textures.wall);
         }
+        
+        this.load.once('complete', () => { this.scene.start('LobbyScene', { direction: 'right' }); });
+        this.load.start(); 
     }
-    create() { this.scene.start('LobbyScene', { direction: 'right' }); }
 }
 // ==========================================
 // LOBBY SCENE
@@ -116,7 +112,7 @@ class LobbyScene extends Phaser.Scene {
         this.tweens.add({ targets: this.cameras.main, scrollX: 0, duration: 350, ease: 'Cubic.easeOut' });
 
         this.comicFont = '"Comic Sans MS", "Chalkboard SE", "Marker Felt", sans-serif';
-        this.activeTheme = window.ShopConfig.bgs.find(b => b.id === window.PlayerData.currentBG) || window.ShopConfig.bgs[0];
+        this.activeTheme = window.OwnedAssets.bgs.find(b => b.id === window.PlayerData.currentBG) || window.OwnedAssets.bgs[0];
         
         if (this.textures.exists(this.activeTheme.id)) {
             let bg = this.add.image(this.scale.width/2, this.scale.height/2, this.activeTheme.id);
@@ -127,10 +123,18 @@ class LobbyScene extends Phaser.Scene {
         let coinsTxt = this.add.text(this.scale.width - 40, 50, `🪙 ${window.PlayerData.coins}`, { fontFamily: this.comicFont, fontSize: '55px', fill: '#FFD54F', fontStyle: 'bold', stroke: '#000', strokeThickness: 8 }).setOrigin(1, 0);
         coinsTxt.setShadow(3, 3, 'rgba(0,0,0,0.5)', 5);
         
+        if (window.PlayerData.username && this.textures.exists('discord_avatar')) {
+            const avatar = this.add.image(80, 80, 'discord_avatar').setDisplaySize(90, 90);
+            const mask = this.make.graphics();
+            mask.fillCircle(80, 80, 45);
+            avatar.setMask(mask.createGeometryMask());
+            this.add.text(140, 80, window.PlayerData.username, { fontFamily: this.comicFont, fontSize: '40px', fill: '#FFF', fontStyle: 'bold', stroke: '#000', strokeThickness: 8 }).setOrigin(0, 0.5);
+        }
+
         let title = this.add.text(this.scale.width/2, 350, 'THE HIDDEN\nPATH', { fontFamily: this.comicFont, fontSize: '120px', fill: '#FFFFFF', fontStyle: 'bold', stroke: '#000000', strokeThickness: 20, align: 'center' }).setOrigin(0.5);
         title.setShadow(5, 5, 'rgba(0,0,0,0.6)', 10);
 
-        const dailyData = window.getDailyData();
+        const dailyData = window.DailyData;
         const isSolved = window.PlayerData.lastSolvedLevel === dailyData.levelNumber;
 
         // אם השלב נפתר - הכפתור אפור ונעול!
@@ -176,7 +180,7 @@ class ShopScene extends Phaser.Scene {
 
         this.comicFont = '"Comic Sans MS", "Chalkboard SE", "Marker Felt", sans-serif';
         
-        this.activeTheme = window.ShopConfig.bgs.find(b => b.id === window.PlayerData.currentBG) || window.ShopConfig.bgs[0];
+        this.activeTheme = window.OwnedAssets.bgs.find(b => b.id === window.PlayerData.currentBG) || window.OwnedAssets.bgs[0];
         
         if (this.textures.exists(this.activeTheme.id)) {
             let bg = this.add.image(this.scale.width/2, this.scale.height/2, this.activeTheme.id);
@@ -207,7 +211,7 @@ class ShopScene extends Phaser.Scene {
 
     buildShopGrid() {
         this.scrollContainer.removeAll(true);
-        const dailyData = window.getDailyData();
+        const dailyData = window.DailyData;
         let currentY = 250; // הכותרת הראשונה מתחילה פה
 
         const createSection = (title, items) => {
@@ -304,15 +308,46 @@ class ShopScene extends Phaser.Scene {
     promptPurchase(item) {
         this.popupTitle.setText(`Buy ${item.name}\nfor 🪙 ${item.price}?`);
         this.yesZone.removeAllListeners();
-        this.yesZone.on('pointerdown', () => {
-            if (window.PlayerData.coins >= item.price) {
-                window.PlayerData.coins -= item.price;
-                if (item.type === 'skin') window.PlayerData.unlockedSkins.push(item.id);
-                if (item.type === 'pack') window.PlayerData.unlockedPacks.push(item.id);
-                if (item.type === 'bg') window.PlayerData.unlockedBGs.push(item.id);
-                this.scene.restart(); 
-            } else {
-                this.cameras.main.shake(200, 0.02); 
+        this.yesZone.on('pointerdown', async () => {
+            // לא נותנים למשתמש ללחוץ פעמיים
+            this.yesZone.disableInteractive();
+            this.popupTitle.setText('Verifying...'); 
+            
+            try {
+                // מבקשים מהשרת אישור רכישה
+                const response = await fetch('/api/buy', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': window.PlayerData.accessToken // גם כאן!
+                    },
+                    body: JSON.stringify({ 
+                        itemId: item.id,
+                        itemType: item.type
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    window.PlayerData.coins = data.player.coins;
+                    window.PlayerData.unlockedSkins = data.player.unlockedSkins;
+                    window.PlayerData.unlockedPacks = data.player.unlockedPacks;
+                    window.PlayerData.unlockedBGs = data.player.unlockedBGs;
+                    window.OwnedAssets = data.ownedAssets; // מרענן את רשימת הנכסים שלי מהשרת!
+                    
+                    let savedY = this.scrollContainer.y;
+                    this.buildShopGrid();
+                    this.scrollContainer.y = savedY;
+                    this.coinsTxt.setText(`🪙 ${window.PlayerData.coins}`);
+                    this.closePopup();
+                } else {
+                    // השרת סירב! (השחקן ניסה לרמות דרך DevTools או שאין לו באמת כסף)
+                    this.popupTitle.setText('Transaction Failed!');
+                    this.cameras.main.shake(200, 0.02); 
+                    this.time.delayedCall(1000, () => this.closePopup());
+                }
+            } catch (e) {
+                console.error("Purchase error", e);
                 this.closePopup();
             }
         });
@@ -360,7 +395,7 @@ class LockerScene extends Phaser.Scene {
         this.tweens.add({ targets: this.cameras.main, scrollX: 0, duration: 350, ease: 'Cubic.easeOut' });
 
         this.comicFont = '"Comic Sans MS", "Chalkboard SE", "Marker Felt", sans-serif';
-        this.activeTheme = window.ShopConfig.bgs.find(b => b.id === window.PlayerData.currentBG) || window.ShopConfig.bgs[0];
+        this.activeTheme = window.OwnedAssets.bgs.find(b => b.id === window.PlayerData.currentBG) || window.OwnedAssets.bgs[0];
         
         if (this.textures.exists(this.activeTheme.id)) {
             let bg = this.add.image(this.scale.width/2, this.scale.height/2, this.activeTheme.id);
@@ -450,12 +485,26 @@ class LockerScene extends Phaser.Scene {
         
         const nameTxt = this.add.text(0, 150, id.toUpperCase(), { fontFamily: this.comicFont, fontSize: '35px', fill: '#FFF', fontStyle: 'bold' }).setOrigin(0.5);
         const zone = this.add.zone(0, 0, 460, 440).setInteractive();
-        zone.on('pointerup', (pointer) => {
+        zone.on('pointerup', async (pointer) => {
             if (Math.abs(pointer.downY - pointer.upY) > 15) return;
-            if (this.currentTab === 'skin') window.PlayerData.currentSkin = id;
-            if (this.currentTab === 'pack') window.PlayerData.currentPack = id;
-            if (this.currentTab === 'bg') window.PlayerData.currentBG = id;
-            this.buildLockerGrid();
+            
+            // השרת בודק אם באמת קנינו את הפריט הזה לפני שהוא מסכים שנלבש אותו
+            try {
+                const res = await fetch('/api/equip', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': window.PlayerData.accessToken },
+                    body: JSON.stringify({ id: id, tab: this.currentTab })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    window.PlayerData.currentSkin = data.currentSkin;
+                    window.PlayerData.currentPack = data.currentPack;
+                    window.PlayerData.currentBG = data.currentBG;
+                    
+                    let savedY = this.scrollContainer.y;
+                    this.buildLockerGrid();
+                    this.scrollContainer.y = savedY;
+                }
+            } catch (e) { console.error("Equip error", e); }
         });
         card.add([bg, imgBox, nameTxt, zone]);
         if (isEquipped) card.add(this.add.text(0, -180, 'EQUIPPED', { fontFamily: this.comicFont, fontSize: '30px', fill: '#000', backgroundColor: '#FFD54F', padding: { x: 10, y: 5 } }).setOrigin(0.5));
@@ -498,9 +547,9 @@ class GameScene extends Phaser.Scene {
         this.cameras.main.scrollX = this.slideDir === 'right' ? -this.scale.width : this.scale.width;
         this.tweens.add({ targets: this.cameras.main, scrollX: 0, duration: 350, ease: 'Cubic.easeOut' });
 
-        const activePack = window.ShopConfig.packs.find(p => p.id === window.PlayerData.currentPack) || window.ShopConfig.packs[0];
+        const activePack = window.OwnedAssets.packs.find(p => p.id === window.PlayerData.currentPack) || window.OwnedAssets.packs[0];
         this.currentBiome = activePack.biome;
-        this.activeTheme = window.ShopConfig.bgs.find(b => b.id === window.PlayerData.currentBG) || window.ShopConfig.bgs[0];
+        this.activeTheme = window.OwnedAssets.bgs.find(b => b.id === window.PlayerData.currentBG) || window.OwnedAssets.bgs[0];
         
         if (this.textures.exists(this.activeTheme.id)) {
             let bg = this.add.image(this.scale.width/2, this.scale.height/2, this.activeTheme.id);
@@ -516,7 +565,7 @@ class GameScene extends Phaser.Scene {
             }});
         });
 
-        const dailyData = window.getDailyData();
+        const dailyData = window.DailyData;
         this.add.text(this.scale.width/2, 50, `LEVEL: ${dailyData.levelNumber}`, { fontFamily: this.comicFont, fontSize: '45px', fill: '#FFFFFF', fontStyle: 'bold', stroke: '#000000', strokeThickness: 8 }).setOrigin(0.5, 0).setDepth(5000);
 
         // התיקון להשהיה: בנייה מיידית של המשחק (ללא delay)! הכל ירוץ תוך כדי ההחלקה.
@@ -526,7 +575,12 @@ class GameScene extends Phaser.Scene {
             this.anims.create({ key: 'water_flow', frames: this.anims.generateFrameNumbers('tex_water'), frameRate: 7, repeat: -1 });
         }
         
-        this.generateProceduralLevel();
+        // מקבלים את "שרטוט" המפה המאובטחת ישירות מהשרת!
+        this.mapData = window.DailyData.mapData;
+        this.spikeTraps = window.DailyData.spikeTraps;
+        this.crystalsLogic = window.DailyData.crystalsLogic;
+        this.bridgeLogic = window.DailyData.bridgeLogic;
+        this.parScore = window.DailyData.parScore;
         this.tileHitboxes = this.add.group();
         this.gridGraphics = this.add.graphics(); 
         
@@ -555,320 +609,6 @@ class GameScene extends Phaser.Scene {
     update(time, delta) {
         if (!this.gridGraphics) return; 
         this.drawRealisticGrid();
-    }
-// =========================================================================
-    // THE AI ARCHITECT - CONSTRAINT-DRIVEN GENERATOR & MULTI-AGENT SOLVER (V15)
-    // =========================================================================
-generateProceduralLevel() {
-        let validMap = false;
-        let attempts = 0;
-        let finalEvaluation = null;
-
-        while (!validMap && attempts < 1500) {
-            attempts++;
-
-            this.mapData = Array(this.gridSize).fill(0).map(() => Array(this.gridSize).fill(1));
-            this.spikeTraps = []; this.doors = []; this.crystalsLogic = []; this.bridgeLogic = null;
-
-            // 1. יצירת מבוך מושלם (אין שטחים ריקים, אין קירות כפולים)
-            this.carveDynamicMaze();
-
-            // 2. יצירת דרכים חלופיות לפעולות חכמות
-            this.createMultiplePaths();
-
-            // 3. הגרלת נהר (40% אופקי, 40% אנכי, 20% בלי נהר)
-            let riverRand = Math.random();
-            this.riverData = { type: 'none', pos: -1 };
-            
-            if (riverRand < 0.4) {
-                this.riverData = { type: 'horizontal', pos: Phaser.Math.Between(2, 4) };
-                this.carveRiver(this.riverData);
-            } else if (riverRand < 0.8) {
-                this.riverData = { type: 'vertical', pos: Phaser.Math.Between(2, 4) };
-                this.carveRiver(this.riverData);
-            }
-
-            // 4. הצבת מלכודות במקומות הגיוניים וקריסטלים
-            this.placeDynamicTrapsAndCrystals();
-
-            // 5. ניקוי שטחים מתים
-            this.sealDeadSpaces();
-
-            // 6. הבטחת נקודות עוגן
-            this.mapData[6][0] = 0;
-            this.mapData[0][6] = 9;
-
-            // 7. הרצת בוט לבדיקת רמת קושי
-            finalEvaluation = this.evaluateMapLogics();
-            if (finalEvaluation.isValid) {
-                validMap = true;
-                this.parScore = finalEvaluation.optimalActions;
-            }
-        }
-        this.hitboxesCreated = false;
-    }
-
-    carveDynamicMaze() {
-        let stack = [{x: 0, y: 6}];
-        this.mapData[6][0] = 0;
-        let visited = Array(this.gridSize).fill(0).map(() => Array(this.gridSize).fill(false));
-        visited[6][0] = true;
-
-        while (stack.length > 0) {
-            let current = stack[stack.length - 1];
-            let neighbors = [];
-            let dirs = [[0, -2], [0, 2], [-2, 0], [2, 0]];
-
-            dirs.forEach(d => {
-                let nx = current.x + d[0], ny = current.y + d[1];
-                if (nx >= 0 && nx < this.gridSize && ny >= 0 && ny < this.gridSize && !visited[ny][nx]) {
-                    neighbors.push({ x: nx, y: ny, dx: d[0], dy: d[1] });
-                }
-            });
-
-            if (neighbors.length > 0) {
-                let next = neighbors[Math.floor(Math.random() * neighbors.length)];
-                this.mapData[current.y + next.dy / 2][current.x + next.dx / 2] = 0;
-                this.mapData[next.y][next.x] = 0;
-                visited[next.y][next.x] = true;
-                stack.push(next);
-            } else {
-                stack.pop();
-            }
-        }
-    }
-
-    createMultiplePaths() {
-        let wallsToBreak = Phaser.Math.Between(2, 4);
-        let broken = 0;
-        for (let i = 0; i < 50 && broken < wallsToBreak; i++) {
-            let x = Phaser.Math.Between(1, 5), y = Phaser.Math.Between(1, 5);
-            if (this.mapData[y][x] === 1) {
-                let openNeighbors = 0;
-                if (this.mapData[y-1][x] === 0) openNeighbors++;
-                if (this.mapData[y+1][x] === 0) openNeighbors++;
-                if (this.mapData[y][x-1] === 0) openNeighbors++;
-                if (this.mapData[y][x+1] === 0) openNeighbors++;
-                if (openNeighbors >= 2) {
-                    this.mapData[y][x] = 0;
-                    broken++;
-                }
-            }
-        }
-    }
-
-    carveRiver(river) {
-        let crossings = [];
-        if (river.type === 'horizontal') {
-            for (let x = 0; x < this.gridSize; x++) this.mapData[river.pos][x] = 2; 
-            for (let x = 1; x < this.gridSize - 1; x++) {
-                if (this.mapData[river.pos - 1][x] === 0 && this.mapData[river.pos + 1][x] === 0) crossings.push(x);
-            }
-            if (crossings.length === 0) { crossings = [2, 4]; this.mapData[river.pos-1][2]=0; this.mapData[river.pos+1][2]=0; }
-            
-            Phaser.Utils.Array.Shuffle(crossings);
-            let bStart = crossings[0];
-            
-            // שומרים על פתח הגיוני בקירות
-            let openMin = Math.max(0, bStart - 1);
-            let openMax = Math.min(this.gridSize - 1, bStart + 1);
-            for (let x = openMin; x <= openMax; x++) { this.mapData[river.pos - 1][x] = 0; this.mapData[river.pos + 1][x] = 0; }
-
-            // התיקון: הגשר עצמו נוסע מ-0 ועד קצה המפה!
-            this.bridgeLogic = { axis: 'x', x: bStart, y: river.pos, dir: 1, min: 0, max: this.gridSize - 1, pauseTimer: 1, initialPos: bStart, initialDir: 1 };
-        
-        } else if (river.type === 'vertical') {
-            for (let y = 0; y < this.gridSize; y++) this.mapData[y][river.pos] = 2; 
-            for (let y = 1; y < this.gridSize - 1; y++) {
-                if (this.mapData[y][river.pos - 1] === 0 && this.mapData[y][river.pos + 1] === 0) crossings.push(y);
-            }
-            if (crossings.length === 0) { crossings = [2, 4]; this.mapData[2][river.pos-1]=0; this.mapData[2][river.pos+1]=0; }
-            
-            Phaser.Utils.Array.Shuffle(crossings);
-            let bStart = crossings[0];
-            
-            let openMin = Math.max(0, bStart - 1);
-            let openMax = Math.min(this.gridSize - 1, bStart + 1);
-            for (let y = openMin; y <= openMax; y++) { this.mapData[y][river.pos - 1] = 0; this.mapData[y][river.pos + 1] = 0; }
-
-            // התיקון: הגשר נוסע מקצה לקצה
-            this.bridgeLogic = { axis: 'y', x: river.pos, y: bStart, dir: 1, min: 0, max: this.gridSize - 1, pauseTimer: 1, initialPos: bStart, initialDir: 1 };
-        }
-    }
-
-    placeDynamicTrapsAndCrystals() {
-        let deadEnds = [];
-        for (let y = 0; y < this.gridSize; y++) {
-            for (let x = 0; x < this.gridSize; x++) {
-                let onRiver = (this.riverData.type === 'horizontal' && y === this.riverData.pos) || (this.riverData.type === 'vertical' && x === this.riverData.pos);
-                if (this.mapData[y][x] === 0 && !onRiver && !(x === 0 && y === 6) && !(x === 6 && y === 0)) {
-                    let openNeighbors = [];
-                    let dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
-                    dirs.forEach(d => {
-                        let nx = x + d[0], ny = y + d[1];
-                        if (nx >= 0 && nx < this.gridSize && ny >= 0 && ny < this.gridSize && this.mapData[ny][nx] === 0) {
-                            openNeighbors.push({ x: nx, y: ny });
-                        }
-                    });
-
-                    if (openNeighbors.length === 1) deadEnds.push({ x: x, y: y, gateX: openNeighbors[0].x, gateY: openNeighbors[0].y });
-                }
-            }
-        }
-
-        Phaser.Utils.Array.Shuffle(deadEnds);
-        let crystalsPlaced = 0;
-
-        deadEnds.forEach(de => {
-            if (crystalsPlaced >= 3) return;
-            this.crystalsLogic.push({ x: de.x, y: de.y, collected: false, container: null });
-            
-            let gx = de.gateX, gy = de.gateY;
-            if (this.mapData[gy][gx] === 0 && !(gx===0&&gy===6) && !(gx===6&&gy===0)) {
-                
-                // הכל הופך למלכודות דוקרנים! אין יותר דלתות!
-                let trapType = 3; 
-                let initialState = Math.random() > 0.5;
-                this.mapData[gy][gx] = trapType;
-                this.spikeTraps.push({ x: gx, y: gy, active: initialState, initialActive: initialState });
-            }
-            crystalsPlaced++;
-        });
-
-        if (crystalsPlaced < 3) {
-            let emptySpots = [];
-            for (let y = 0; y < this.gridSize; y++) {
-                for (let x = 0; x < this.gridSize; x++) {
-                    let onRiver = (this.riverData.type === 'horizontal' && y === this.riverData.pos) || (this.riverData.type === 'vertical' && x === this.riverData.pos);
-                    if (this.mapData[y][x] === 0 && !onRiver && !(x === 0 && y === 6) && !(x === 6 && y === 0)) {
-                        emptySpots.push({x, y});
-                    }
-                }
-            }
-            Phaser.Utils.Array.Shuffle(emptySpots);
-            for (let spot of emptySpots) {
-                if (this.crystalsLogic.length >= 3) break;
-                let tooClose = false;
-                for (let c of this.crystalsLogic) {
-                    if (Math.abs(c.x - spot.x) + Math.abs(c.y - spot.y) < 3) { tooClose = true; break; }
-                }
-                if (!tooClose) this.crystalsLogic.push({ x: spot.x, y: spot.y, collected: false, container: null });
-            }
-        }
-    }
-
-    sealDeadSpaces() {
-        let queue = [{ x: 0, y: 6 }];
-        let reachable = Array(this.gridSize).fill(0).map(() => Array(this.gridSize).fill(false));
-        reachable[6][0] = true;
-        let moves = [[0, -1], [0, 1], [-1, 0], [1, 0]];
-
-        while (queue.length > 0) {
-            let curr = queue.shift();
-            for (let m of moves) {
-                let nx = curr.x + m[0], ny = curr.y + m[1];
-                if (nx >= 0 && nx < this.gridSize && ny >= 0 && ny < this.gridSize && !reachable[ny][nx]) {
-                    let tile = this.mapData[ny][nx];
-                    let isBridge = false;
-                    if (this.bridgeLogic) {
-                        isBridge = (this.bridgeLogic.axis === 'x' && ny === this.bridgeLogic.y && nx >= this.bridgeLogic.min && nx <= this.bridgeLogic.max) ||
-                                   (this.bridgeLogic.axis === 'y' && nx === this.bridgeLogic.x && ny >= this.bridgeLogic.min && ny <= this.bridgeLogic.max);
-                    }
-                    if (tile === 0 || tile === 2 || tile === 3 || tile === 5 || tile === 9 || isBridge) {
-                        reachable[ny][nx] = true;
-                        queue.push({ x: nx, y: ny });
-                    }
-                }
-            }
-        }
-
-        for (let y = 0; y < this.gridSize; y++) {
-            for (let x = 0; x < this.gridSize; x++) {
-                if (!reachable[y][x] && this.mapData[y][x] !== 1) this.mapData[y][x] = 1;
-            }
-        }
-    }
-
-    evaluateMapLogics() {
-        let queue = [{ x: 0, y: 6, t: 0, mask: 0, pathHistory: [] }];
-        let visited = new Set();
-        visited.add(`0,6,0,0`);
-        let moves = [[0, -1], [0, 1], [-1, 0], [1, 0], [0, 0]]; 
-        let validSolutions = [];
-
-        while (queue.length > 0) {
-            let curr = queue.shift();
-            if (curr.t > 40) continue; 
-
-            if (curr.x === 6 && curr.y === 0 && curr.mask === 7) {
-                validSolutions.push(curr);
-                continue;
-            }
-
-            let nextTime = curr.t + 1;
-            let timeCycle = nextTime % 4;
-            let trapsFlipped = (nextTime % 2 !== 0);
-
-            let curBx = -1, curBy = -1;
-            if (this.bridgeLogic) {
-                curBx = this.bridgeLogic.x;
-                curBy = this.bridgeLogic.y;
-                let bDir = this.bridgeLogic.initialDir;
-                let bPos = this.bridgeLogic.initialPos;
-                let bTimer = 1;
-                for (let i = 0; i < nextTime; i++) {
-                    if (bTimer > 0) bTimer--;
-                    else {
-                        bPos += bDir;
-                        if (bPos >= this.bridgeLogic.max || bPos <= this.bridgeLogic.min) bDir *= -1;
-                        bTimer = 1;
-                    }
-                }
-                if (this.bridgeLogic.axis === 'x') curBx = bPos;
-                else curBy = bPos;
-            }
-
-            for (let m of moves) {
-                let nx = curr.x + m[0], ny = curr.y + m[1];
-                if (nx >= 0 && nx < this.gridSize && ny >= 0 && ny < this.gridSize) {
-                    let tile = this.mapData[ny][nx];
-                    let isMovingBridge = (this.bridgeLogic && ny === curBy && nx === curBx);
-                    let canEnter = false;
-
-                    if (tile === 9 && curr.mask !== 7) continue; 
-
-                    if (isMovingBridge || tile === 0 || tile === 9) canEnter = true;
-                    else if (tile === 3) {
-                        let trap = this.spikeTraps.find(s => s.x === nx && s.y === ny);
-                        if (!(trapsFlipped ? !trap.initialActive : trap.initialActive)) canEnter = true;
-                    } else if (tile === 5) {
-                        let door = this.doors.find(d => d.x === nx && d.y === ny);
-                        if (trapsFlipped ? !door.initialOpen : door.initialOpen) canEnter = true;
-                    }
-
-                    if (canEnter) {
-                        let nextMask = curr.mask;
-                        let crystalIdx = this.crystalsLogic.findIndex(c => c.x === nx && c.y === ny);
-                        if (crystalIdx !== -1) nextMask |= (1 << crystalIdx);
-
-                        let stateKey = `${nx},${ny},${timeCycle},${nextMask}`;
-                        if (!visited.has(stateKey)) {
-                            visited.add(stateKey);
-                            queue.push({ x: nx, y: ny, t: nextTime, mask: nextMask, pathHistory: [...curr.pathHistory, { x: nx, y: ny, action: m }] });
-                        }
-                    }
-                }
-            }
-        }
-
-        if (validSolutions.length === 0) return { isValid: false };
-        validSolutions.sort((a, b) => a.t - b.t);
-        let bestSolution = validSolutions[0];
-
-        let totalDifferentRoutes = new Set(validSolutions.map(s => s.pathHistory.map(h => `${h.x},${h.y}`).join('-'))).size;
-        
-        if (bestSolution.t >= 14 && totalDifferentRoutes >= 2) return { isValid: true, optimalActions: bestSolution.t };
-        return { isValid: false };
     }
 
     getPerspective(col, row, heightOffset = 0) {
@@ -1315,7 +1055,7 @@ generateProceduralLevel() {
         if(this.playerContainer) this.playerContainer.destroy();
         this.playerContainer = this.add.container(0, 0);
         
-        let skinConfig = window.ShopConfig.skins.find(s => s.id === window.PlayerData.currentSkin) || window.ShopConfig.skins[0];
+        let skinConfig = window.OwnedAssets.skins.find(s => s.id === window.PlayerData.currentSkin) || window.OwnedAssets.skins[0];
         
         if (skinConfig.isDefault) {
             // הדיפולט: הריבוע האדום הגיאומטרי
@@ -1345,8 +1085,7 @@ generateProceduralLevel() {
         // הלבבות עברו לצד ימין מתחת ליהלומים!
         this.scoreText = this.add.text(this.scale.width - 40, 50, `💎 0/3`, { fontFamily: this.comicFont, fontSize: '45px', fill: '#00E5FF', fontStyle: 'bold', stroke: '#000000', strokeThickness: 8 }).setOrigin(1, 0);
         this.scoreText.setShadow(3, 3, 'rgba(0,0,0,0.4)', 5); 
-        
-        this.livesText = this.add.text(this.scale.width - 40, 120, `❤️ ${this.tries}/${this.maxTries}`, { fontFamily: this.comicFont, fontSize: '45px', fill: '#FF0000', fontStyle: 'bold', stroke: '#000000', strokeThickness: 8 }).setOrigin(1, 0);
+        this.livesText = this.add.text(this.scale.width - 40, 120, "❤️ " + window.PlayerData.triesLeft + "/" + this.maxTries, { fontFamily: this.comicFont, fontSize: '45px', fill: '#FF0000', fontStyle: 'bold', stroke: '#000000', strokeThickness: 8 }).setOrigin(1, 0);
         this.livesText.setShadow(3, 3, 'rgba(0,0,0,0.4)', 5); 
     }
 
@@ -1422,10 +1161,24 @@ generateProceduralLevel() {
         this.createCartoonCard(startX + spacing * 5, this.cardsY, '🔁', 'LOOP', () => this.addAction('LOOP_START'));
         this.createCartoonCard(startX + spacing * 6, this.cardsY, '🔚', 'END', () => this.addAction('LOOP_END'));
         
-        // ממורכז יחד עם הפח כדי שיראו כמו קבוצה אחידה 
-        this.createCartoonButton(this.scale.width / 2 + 55, this.scale.height - 110, 'EXECUTE', () => {
-            if (!this.isPlaying && this.actionQueue.length > 0 && this.tries < this.maxTries) {
-                this.isPlaying = true; this.currentStep = 0; this.loopRuntimeCounts = {}; this.executeNextAction();
+        this.createCartoonButton(this.scale.width / 2 + 55, this.scale.height - 110, 'EXECUTE', async () => {
+            if (!this.isPlaying && this.actionQueue.length > 0) {
+                if (window.PlayerData.triesLeft <= 0) return;
+                
+                try {
+                    // השרת מאשר את הורדת החיים. אם האקר מנסה לזייף - זה לא יעבוד!
+                    const res = await fetch('/api/lose_life', { method: 'POST', headers: { 'Authorization': window.PlayerData.accessToken } });
+                    if (!res.ok) return; // נחסם ע"י השרת
+                    const data = await res.json();
+                    
+                    window.PlayerData.triesLeft = data.triesLeft;
+                    this.livesText.setText(`❤️ ${window.PlayerData.triesLeft}/${this.maxTries}`);
+                    
+                    this.isPlaying = true; 
+                    this.currentStep = 0; 
+                    this.loopRuntimeCounts = {}; 
+                    this.executeNextAction();
+                } catch (e) { console.error("Error executing", e); }
             }
         });
     }
@@ -1556,17 +1309,13 @@ generateProceduralLevel() {
     // --- סוף הבלוק השני להחלפה ---
 
     triggerDeath(reason) {
-        // עכשיו המסך תמיד ירעד כשנכשלים, לא משנה מה הסיבה!
         this.cameras.main.shake(150, 0.015); 
-
         this.time.delayedCall(200, () => {
             this.tweens.add({
                 targets: this.playerContainer, scaleX: 1.5, scaleY: 1.5, alpha: 0, duration: 250, ease: 'Quad.easeOut',
                 onComplete: () => {
-                    this.tries++; 
-                    this.livesText.setText(`❤️ ${this.tries}/${this.maxTries}`);
-                    if (this.tries >= this.maxTries) { 
-                        this.livesText.setText("GAME OVER!"); 
+                    if (window.PlayerData.triesLeft <= 0) { 
+                        this.showGameOverScreen(); 
                         return; 
                     }
                     this.resetLevel();
@@ -1575,57 +1324,58 @@ generateProceduralLevel() {
         });
     }
 
+    showGameOverScreen() {
+        this.isPlaying = true; 
+        const panel = this.add.graphics(); 
+        panel.fillStyle(0x000000, 0.9); panel.fillRect(0, 0, this.scale.width, this.scale.height); panel.setDepth(200);
+        
+        this.add.text(this.scale.width/2, 400, 'SYSTEM FAILURE\nGAME OVER', { fontFamily: this.comicFont, fontSize: '80px', fill: '#FF5252', fontStyle: 'bold', stroke: '#000', strokeThickness: 12, align: 'center' }).setOrigin(0.5).setDepth(201);
+        this.add.text(this.scale.width/2, 600, 'NO LIVES REMAINING TODAY', { fontFamily: this.comicFont, fontSize: '35px', fill: '#FFF' }).setOrigin(0.5).setDepth(201);
+        
+        const btnBg = this.add.graphics(); btnBg.fillStyle(0xFF5252, 1); btnBg.lineStyle(6, 0x000, 1);
+        btnBg.fillRoundedRect(this.scale.width/2 - 250, 800, 500, 100, 20); btnBg.strokeRoundedRect(this.scale.width/2 - 250, 800, 500, 100, 20); btnBg.setDepth(201);
+        this.add.text(this.scale.width/2, 850, 'RETURN TO LOBBY', { fontFamily: this.comicFont, fontSize: '40px', fill: '#FFF', fontStyle: 'bold', stroke: '#000', strokeThickness: 6 }).setOrigin(0.5).setDepth(202);
+        
+        const btnZone = this.add.zone(this.scale.width/2, 850, 500, 100).setInteractive().setDepth(203);
+        btnZone.on('pointerdown', () => { this.tweens.add({ targets: this.cameras.main, scrollX: -this.scale.width, duration: 350, ease: 'Cubic.easeIn', onComplete: () => { this.scene.start('LobbyScene', { direction: 'left' }); }}); });
+    }
+
     // --- מסך הניצחון וחישוב היעילות הלוגית ---
     showWinScreen() {
         this.isPlaying = true; 
         
-        // --- נועל את השלב ליום הזה! ---
-        const dailyData = window.getDailyData();
-        window.PlayerData.lastSolvedLevel = dailyData.levelNumber;
-        
         let actionCost = 0; 
         this.actionQueue.forEach(a => { 
             if(a.type !== 'LOOP_END' && a.type !== 'LOOP_START') actionCost++; 
-            if(a.type === 'LOOP_START') actionCost++; // לולאה נחשבת כבלוק אחד
+            if(a.type === 'LOOP_START') actionCost++; 
         });
         
-        let efficiencyBonus = Math.max(0, (this.parScore - actionCost) * 200);
-        let totalScore = (this.collectedCrystals * 1000) - (actionCost * 100) + efficiencyBonus;
-        
-        // --- מערכת הכלכלה: המרת ניקוד למטבעות! ---
-        let earnedCoins = Math.max(10, Math.floor(totalScore / 10)); // מינימום 10 מטבעות לניצחון
-        window.PlayerData.coins += earnedCoins;
+        // מבקשים מהשרת לשפוט את הניצחון ולתת כסף
+        fetch('/api/win', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': window.PlayerData.accessToken },
+            body: JSON.stringify({ actionCost: actionCost })
+        }).then(res => res.json()).then(data => {
+            window.PlayerData.coins = data.coins;
+            window.PlayerData.lastSolvedLevel = window.DailyData.levelNumber;
 
-        const panel = this.add.graphics(); 
-        panel.fillStyle(0x000000, 0.85); 
-        panel.fillRect(0, 0, this.scale.width, this.scale.height); 
-        panel.setDepth(200);
-        
-        this.add.text(this.scale.width/2, 300, 'MISSION\nACCOMPLISHED', { fontFamily: this.comicFont, fontSize: '75px', fill: '#FFD54F', fontStyle: 'bold', stroke: '#000000', strokeThickness: 12, align: 'center' }).setOrigin(0.5).setDepth(201);
-        
-        this.add.text(this.scale.width/2, 550, `Crystals Extracted: ${this.collectedCrystals}/3`, { fontFamily: this.comicFont, fontSize: '45px', fill: '#00E5FF', fontStyle: 'bold' }).setOrigin(0.5).setDepth(201);
-        this.add.text(this.scale.width/2, 650, `Blocks Used: ${actionCost} (Par: ${this.parScore})`, { fontFamily: this.comicFont, fontSize: '40px', fill: '#FFFFFF' }).setOrigin(0.5).setDepth(201);
-        
-        this.add.text(this.scale.width/2, 800, `FINAL SCORE: ${totalScore}`, { fontFamily: this.comicFont, fontSize: '70px', fill: '#4CAF50', fontStyle: 'bold', stroke: '#000000', strokeThickness: 10 }).setOrigin(0.5).setDepth(201);
-        
-        // חשיפת המטבעות שהרווחנו
-        this.add.text(this.scale.width/2, 950, `+ 🪙 ${earnedCoins} COINS!`, { fontFamily: this.comicFont, fontSize: '65px', fill: '#FFC107', fontStyle: 'bold', stroke: '#000', strokeThickness: 10 }).setOrigin(0.5).setDepth(201);
+            const panel = this.add.graphics(); 
+            panel.fillStyle(0x000000, 0.85); panel.fillRect(0, 0, this.scale.width, this.scale.height); panel.setDepth(200);
+            
+            this.add.text(this.scale.width/2, 300, 'MISSION\nACCOMPLISHED', { fontFamily: this.comicFont, fontSize: '75px', fill: '#FFD54F', fontStyle: 'bold', stroke: '#000000', strokeThickness: 12, align: 'center' }).setOrigin(0.5).setDepth(201);
+            this.add.text(this.scale.width/2, 550, `Crystals Extracted: ${this.collectedCrystals}/3`, { fontFamily: this.comicFont, fontSize: '45px', fill: '#00E5FF', fontStyle: 'bold' }).setOrigin(0.5).setDepth(201);
+            this.add.text(this.scale.width/2, 650, `Blocks Used: ${actionCost} (Par: ${data.parScore})`, { fontFamily: this.comicFont, fontSize: '40px', fill: '#FFFFFF' }).setOrigin(0.5).setDepth(201);
+            this.add.text(this.scale.width/2, 800, `FINAL SCORE: ${data.totalScore}`, { fontFamily: this.comicFont, fontSize: '70px', fill: '#4CAF50', fontStyle: 'bold', stroke: '#000000', strokeThickness: 10 }).setOrigin(0.5).setDepth(201);
+            this.add.text(this.scale.width/2, 950, `+ 🪙 ${data.earnedCoins} COINS!`, { fontFamily: this.comicFont, fontSize: '65px', fill: '#FFC107', fontStyle: 'bold', stroke: '#000', strokeThickness: 10 }).setOrigin(0.5).setDepth(201);
 
-        // כפתור חזרה ללובי (מחליק חזרה שמאלה)
-        const btnBg = this.add.graphics();
-        btnBg.fillStyle(0x4CAF50, 1); btnBg.lineStyle(6, 0x000000, 1);
-        btnBg.fillRoundedRect(this.scale.width/2 - 250, 1150, 500, 100, 20); 
-        btnBg.strokeRoundedRect(this.scale.width/2 - 250, 1150, 500, 100, 20);
-        btnBg.setDepth(201);
-        
-        this.add.text(this.scale.width/2, 1200, 'COLLECT & RETURN', { fontFamily: this.comicFont, fontSize: '40px', fill: '#FFF', fontStyle: 'bold', stroke: '#000', strokeThickness: 6 }).setOrigin(0.5).setDepth(202);
-        
-        const btnZone = this.add.zone(this.scale.width/2, 1200, 500, 100).setInteractive().setDepth(203);
-        btnZone.on('pointerdown', () => {
-            // החלקה אלגנטית חזרה ללובי!
-            this.tweens.add({ targets: this.cameras.main, scrollX: -this.scale.width, duration: 350, ease: 'Cubic.easeIn', onComplete: () => {
-                this.scene.start('LobbyScene', { direction: 'left' });
-            }});
+            const btnBg = this.add.graphics(); btnBg.fillStyle(0x4CAF50, 1); btnBg.lineStyle(6, 0x000000, 1);
+            btnBg.fillRoundedRect(this.scale.width/2 - 250, 1150, 500, 100, 20); btnBg.strokeRoundedRect(this.scale.width/2 - 250, 1150, 500, 100, 20); btnBg.setDepth(201);
+            this.add.text(this.scale.width/2, 1200, 'COLLECT & RETURN', { fontFamily: this.comicFont, fontSize: '40px', fill: '#FFF', fontStyle: 'bold', stroke: '#000', strokeThickness: 6 }).setOrigin(0.5).setDepth(202);
+            
+            const btnZone = this.add.zone(this.scale.width/2, 1200, 500, 100).setInteractive().setDepth(203);
+            btnZone.on('pointerdown', () => {
+                this.tweens.add({ targets: this.cameras.main, scrollX: -this.scale.width, duration: 350, ease: 'Cubic.easeIn', onComplete: () => { this.scene.start('LobbyScene', { direction: 'left' }); }});
+            });
         });
     }
 
@@ -1645,7 +1395,7 @@ generateProceduralLevel() {
         
         // עדכון כיוון השחקן (עיניים או תמונה)
         if (this.playerSprite) {
-            let skinConfig = window.ShopConfig.skins.find(s => s.id === window.PlayerData.currentSkin);
+            let skinConfig = window.OwnedAssets.skins.find(s => s.id === window.PlayerData.currentSkin);
             this.playerSprite.setTexture(`${skinConfig.id}_${this.playerLogic.direction}`);
         } else {
             const eyeOffsets = [{x: 8, y:0}, {x:0, y:8}, {x:-8, y:0}, {x:0, y:-8}];
