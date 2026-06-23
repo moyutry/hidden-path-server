@@ -72,7 +72,16 @@ class BootScene extends Phaser.Scene {
             window.PlayerData.currentBG = dbPlayer.currentBG;
             window.PlayerData.lastSolvedLevel = dbPlayer.lastSolvedLevel;
 
-        } catch (e) { console.log("Local Mode or Error:", e); }
+        } catch (e) { 
+            console.log("Local Mode or Error:", e); 
+            // נתוני חירום: אם הדיסקורד או השרת נכשלים, אנחנו שמים נתוני בסיס כדי שהמשחק לא יקרוס!
+            window.OwnedAssets = { 
+                skins: [{ id: 'default', isDefault: true }], 
+                packs: [{ id: 'default', isDefault: true, biome: { floor: '#8BC34A', floorDark: '#5D4037', wall: '#795548', wallDark: '#5D4037', trap: '#29B6F6', trapDark: '#0288D1' } }], 
+                bgs: [{ id: 'default', isDefault: true, uiMain: 16301008, uiDark: 12720219 }] 
+            };
+            window.DailyData = { levelNumber: 0, bgs: [], packs: [], skins: [], mapData: [], spikeTraps: [], crystalsLogic: [], bridgeLogic: null, parScore: 10 };
+        }
 
         loadingText.setText('LOADING ASSETS...');
 
