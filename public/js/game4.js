@@ -548,6 +548,7 @@ class GameScene extends Phaser.Scene {
         this.bridgeVisualX = undefined;
         this.bridgeVisualY = undefined;
         this.staticGraphics = null;
+        this.gridInitialized = false;
     }
 
     create() {
@@ -635,26 +636,24 @@ class GameScene extends Phaser.Scene {
     }
 
     drawRealisticGrid() { 
-        // ==========================================
-        // חלק 1: ציור סטטי (רץ רק פעם אחת בתחילת השלב!)
-        // ==========================================
-        if (!this.staticGraphics) {
-            this.staticGraphics = this.add.graphics();
+        if (!this.gridInitialized) {
+            this.gridInitialized = true;
             this.staticImagesGroup = this.add.group();
-            this.dynamicGraphics = this.add.graphics();
-            this.dynamicImagesGroup = this.add.group();
+            this.trapObjects = {}; // זיכרון חכם למלכודות
+            this.bridgeObj = { gfx: this.add.graphics(), img: null, maskGfx: null }; // זיכרון חכם לגשר
 
-            // --- ציור צללית ---
+            // --- 1. ציור צללית מעודנת ---
+            let shadowGfx = this.add.graphics();
             for (let i = 1; i <= 5; i++) {
                 const s_tl = this.getPerspective(-1, -1, -15); const s_tr = this.getPerspective(this.gridSize, -1, -15);
                 const s_br = this.getPerspective(this.gridSize, this.gridSize, -15); const s_bl = this.getPerspective(-1, this.gridSize, -15);
-                this.staticGraphics.fillStyle(0x000000, 0.06); this.staticGraphics.beginPath();
-                this.staticGraphics.moveTo(s_tl.x, s_tl.y + 25 + (i * 3)); this.staticGraphics.lineTo(s_tr.x, s_tr.y + 25 + (i * 3));
-                this.staticGraphics.lineTo(s_br.x, s_br.y + 25 + (i * 3)); this.staticGraphics.lineTo(s_bl.x, s_bl.y + 25 + (i * 3));
-                this.staticGraphics.closePath(); this.staticGraphics.fillPath();
+                shadowGfx.fillStyle(0x000000, 0.06); shadowGfx.beginPath();
+                shadowGfx.moveTo(s_tl.x, s_tl.y + 25 + (i * 3)); shadowGfx.lineTo(s_tr.x, s_tr.y + 25 + (i * 3));
+                shadowGfx.lineTo(s_br.x, s_br.y + 25 + (i * 3)); shadowGfx.lineTo(s_bl.x, s_bl.y + 25 + (i * 3));
+                shadowGfx.closePath(); shadowGfx.fillPath();
             }
 
-            // --- ציור המפה הסטטית (קירות, מים, רצפה) ---
+            // --- 2. בניית המפה פעם אחת ולתמיד! ---
             for (let row = -1; row < this.gridSize; row++) {
                 for (let col = -1; col <= this.gridSize; col++) {
                     let isExternalWall = (row === -1 || col === -1 || col === this.gridSize);
@@ -664,12 +663,9 @@ class GameScene extends Phaser.Scene {
                         tileType = this.mapData[row][col];
                         if (tileType === 5) tileType = 3; 
                         let isBridgeSlot = (this.bridgeLogic && row === this.bridgeLogic.y && col === this.bridgeLogic.x);
-                        if (isBridgeSlot || tileType === 4) tileType = 2; // תמיד יש מים מתחת לגשר
+                        if (isBridgeSlot || tileType === 4) tileType = 2; 
                     }
                     
-                    // מדלגים על ציור המלכודות כאן - הן דינמיות ויצוירו בחלק השני!
-                    if (tileType === 3) continue;
-
                     let height = (tileType === 1 || isExternalWall) ? 25 : (tileType === 2 ? -15 : 0); 
                     let baseHeight = -15; 
 
@@ -685,6 +681,7 @@ class GameScene extends Phaser.Scene {
                     else if (tileType === 2) { topColor = this.currentBiome.trap; sideColor = this.currentBiome.trapDark; textureKey = 'tex_water'; } 
                     else if (tileType === 0) { topColor = this.currentBiome.floor; sideColor = this.currentBiome.floorDark; textureKey = this.textures.exists('custom_floor') ? 'custom_floor' : 'tex_floor'; } 
                     else if (tileType === 1) { topColor = this.currentBiome.wall; sideColor = this.currentBiome.wallDark; textureKey = this.textures.exists('custom_wall') ? 'custom_wall' : 'tex_wall'; }
+                    else if (tileType === 3) { topColor = this.currentBiome.floor; sideColor = this.currentBiome.floorDark; textureKey = 'tex_trap_off'; } // המלכודות מקבלות מרצפת בסיס!
 
                     let localGfx = this.add.graphics(); localGfx.setDepth(tileDepthTier + 2); 
                     this.staticImagesGroup.add(localGfx);
@@ -709,109 +706,55 @@ class GameScene extends Phaser.Scene {
                         localGfx.closePath(); localGfx.strokePath();
                     }
 
+                    let topImg = null;
                     if (textureKey && this.textures.exists(textureKey)) {
                         const centerX = (tl.x + tr.x + bl.x + br.x) / 4; const centerY = (tl.y + tr.y + bl.y + br.y) / 4;
                         const tileW = Math.max(tl.x, tr.x, bl.x, br.x) - Math.min(tl.x, tr.x, bl.x, br.x); const tileH = Math.max(tl.y, tr.y, bl.y, br.y) - Math.min(tl.y, tr.y, bl.y, br.y);
-                        let img;
+                        
                         if (tileType === 2 && this.anims && this.anims.exists('water_flow')) {
-                            img = this.add.sprite(centerX, centerY, textureKey); img.play('water_flow', true);
-                        } else { img = this.add.image(centerX, centerY, textureKey); }
-                        img.setDisplaySize(tileW, tileH); img.setDepth(tileDepthTier + 1);
+                            topImg = this.add.sprite(centerX, centerY, textureKey); topImg.play('water_flow', true);
+                        } else { topImg = this.add.image(centerX, centerY, textureKey); }
+                        topImg.setDisplaySize(tileW, tileH); topImg.setDepth(tileDepthTier + 1);
+                        
                         let maskGfx = this.make.graphics(); maskGfx.fillStyle(0xffffff); maskGfx.beginPath();
                         maskGfx.moveTo(tl.x, tl.y); maskGfx.lineTo(tr.x, tr.y); maskGfx.lineTo(br.x, br.y); maskGfx.lineTo(bl.x, bl.y);
-                        maskGfx.closePath(); maskGfx.fillPath(); img.setMask(maskGfx.createGeometryMask());
-                        this.staticImagesGroup.add(img); this.staticImagesGroup.add(maskGfx);
+                        maskGfx.closePath(); maskGfx.fillPath(); topImg.setMask(maskGfx.createGeometryMask());
+                        this.staticImagesGroup.add(topImg); this.staticImagesGroup.add(maskGfx);
                     } else {
                         localGfx.fillStyle(Phaser.Display.Color.HexStringToColor(topColor).color, 1); localGfx.beginPath();
                         localGfx.moveTo(tl.x, tl.y); localGfx.lineTo(tr.x, tr.y); localGfx.lineTo(br.x, br.y); localGfx.lineTo(bl.x, bl.y);
                         localGfx.closePath(); localGfx.fillPath();
                     }
+                    
                     localGfx.lineStyle(4, 0x000000, 1); localGfx.beginPath();
                     localGfx.moveTo(tl.x, tl.y); localGfx.lineTo(tr.x, tr.y); localGfx.lineTo(br.x, br.y); localGfx.lineTo(bl.x, bl.y);
                     localGfx.closePath(); localGfx.strokePath();
+
+                    // --- 3. הלב של התיקון: שומרים את האובייקט של המלכודת בזיכרון במקום למחוק! ---
+                    if (tileType === 3) {
+                        let spikeGfx = this.add.graphics(); spikeGfx.setDepth(tileDepthTier + 2);
+                        this.trapObjects[`${col}_${row}`] = { img: topImg, spikeGfx: spikeGfx };
+                    }
+                }
+            }
+
+            // --- 4. הכנת אובייקט הגשר בזיכרון ---
+            if (this.bridgeLogic) {
+                if (this.textures.exists('tex_bridge')) {
+                    this.bridgeObj.img = this.add.image(0, 0, 'tex_bridge');
+                    this.bridgeObj.maskGfx = this.make.graphics();
+                    this.bridgeObj.img.setMask(this.bridgeObj.maskGfx.createGeometryMask());
                 }
             }
         }
 
         // ==========================================
-        // חלק 2: ציור אלמנטים דינמיים בלבד (מלכודות וגשר)
+        // עדכון אובייקטים קיימים בלבד (קליל ומהיר, רץ ב-60FPS בקלות!)
         // ==========================================
-        this.dynamicGraphics.clear(); 
-        this.dynamicImagesGroup.clear(true, true); 
+        this.updateBridgeVisuals();
+        this.updateTrapsVisuals();
 
-        // 1. ציור המלכודות
-        for (let row = 0; row < this.gridSize; row++) {
-            for (let col = 0; col < this.gridSize; col++) {
-                if (this.mapData[row][col] === 3) {
-                    const trap = this.spikeTraps.find(s => s.x === col && s.y === row);
-                    const textureKey = (trap && trap.active) ? 'tex_trap_on' : 'tex_trap_off';
-
-                    const tl = this.getPerspective(col - 0.5, row - 0.5, 0); const tr = this.getPerspective(col + 0.5, row - 0.5, 0);
-                    const bl = this.getPerspective(col - 0.5, row + 0.5, 0); const br = this.getPerspective(col + 0.5, row + 0.5, 0);
-
-                    let tileDepthTier = (row + 2) * 30 + (col + 2) * 2;
-                    let localGfx = this.add.graphics(); localGfx.setDepth(tileDepthTier + 2);
-                    this.dynamicImagesGroup.add(localGfx);
-
-                    if (this.textures.exists(textureKey)) {
-                        const centerX = (tl.x + tr.x + bl.x + br.x) / 4; const centerY = (tl.y + tr.y + bl.y + br.y) / 4;
-                        const tileW = Math.max(tl.x, tr.x, bl.x, br.x) - Math.min(tl.x, tr.x, bl.x, br.x); const tileH = Math.max(tl.y, tr.y, bl.y, br.y) - Math.min(tl.y, tr.y, bl.y, br.y);
-                        let img = this.add.image(centerX, centerY, textureKey);
-                        img.setDisplaySize(tileW, tileH); img.setDepth(tileDepthTier + 1);
-                        let maskGfx = this.make.graphics(); maskGfx.fillStyle(0xffffff); maskGfx.beginPath();
-                        maskGfx.moveTo(tl.x, tl.y); maskGfx.lineTo(tr.x, tr.y); maskGfx.lineTo(br.x, br.y); maskGfx.lineTo(bl.x, bl.y);
-                        maskGfx.closePath(); maskGfx.fillPath(); img.setMask(maskGfx.createGeometryMask());
-                        this.dynamicImagesGroup.add(img); this.dynamicImagesGroup.add(maskGfx);
-                    } else {
-                        localGfx.fillStyle(Phaser.Display.Color.HexStringToColor(this.currentBiome.floor).color, 1); localGfx.beginPath();
-                        localGfx.moveTo(tl.x, tl.y); localGfx.lineTo(tr.x, tr.y); localGfx.lineTo(br.x, br.y); localGfx.lineTo(bl.x, bl.y);
-                        localGfx.closePath(); localGfx.fillPath();
-                    }
-                    localGfx.lineStyle(4, 0x000000, 1); localGfx.beginPath();
-                    localGfx.moveTo(tl.x, tl.y); localGfx.lineTo(tr.x, tr.y); localGfx.lineTo(br.x, br.y); localGfx.lineTo(bl.x, bl.y);
-                    localGfx.closePath(); localGfx.strokePath();
-
-                    if (trap && trap.active) {
-                        const spikeTop = this.getPerspective(col, row, 30);
-                        localGfx.fillStyle(0xFF3333, 1); localGfx.lineStyle(2, 0x000000, 1);
-                        localGfx.beginPath(); localGfx.moveTo(tl.x + 10*tl.scale, tl.y + 10*tl.scale);
-                        localGfx.lineTo(br.x - 10*br.scale, br.y - 10*br.scale); localGfx.lineTo(spikeTop.x, spikeTop.y);
-                        localGfx.closePath(); localGfx.fillPath(); localGfx.strokePath();
-                    }
-                }
-            }
-        }
-
-        // 2. ציור הגשר (שיעקוב אחרי האנימציה!)
-        if (this.bridgeLogic && this.bridgeVisualX !== undefined) {
-            let brH = -5;
-            const b_tl = this.getPerspective(this.bridgeVisualX - 0.5, this.bridgeVisualY - 0.5, brH); const b_tr = this.getPerspective(this.bridgeVisualX + 0.5, this.bridgeVisualY - 0.5, brH);
-            const b_bl = this.getPerspective(this.bridgeVisualX - 0.5, this.bridgeVisualY + 0.5, brH); const b_br = this.getPerspective(this.bridgeVisualX + 0.5, this.bridgeVisualY + 0.5, brH);
-
-            let bridgeGfx = this.add.graphics();
-            let frontRow = Math.ceil(this.bridgeVisualY); let frontCol = Math.ceil(this.bridgeVisualX);
-            let bridgeDepth = (frontRow + 2) * 30 + (frontCol + 2) * 2 + 3;
-            bridgeGfx.setDepth(bridgeDepth); this.dynamicImagesGroup.add(bridgeGfx);
-
-            if (this.textures.exists('tex_bridge')) {
-                const bCX = (b_tl.x + b_tr.x + b_bl.x + b_br.x) / 4; const bCY = (b_tl.y + b_tr.y + b_bl.y + b_br.y) / 4;
-                const bW = Math.max(b_tl.x, b_tr.x, b_bl.x, b_br.x) - Math.min(b_tl.x, b_tr.x, b_bl.x, b_br.x); const bH = Math.max(b_tl.y, b_tr.y, b_bl.y, b_br.y) - Math.min(b_tl.y, b_tr.y, b_bl.y, b_br.y);
-                let bImg = this.add.image(bCX, bCY, 'tex_bridge'); bImg.setDisplaySize(bW, bH); bImg.setDepth(bridgeDepth - 1);
-                let bMask = this.make.graphics(); bMask.fillStyle(0xffffff); bMask.beginPath();
-                bMask.moveTo(b_tl.x, b_tl.y); bMask.lineTo(b_tr.x, b_tr.y); bMask.lineTo(b_br.x, b_br.y); bMask.lineTo(b_bl.x, b_bl.y);
-                bMask.closePath(); bMask.fillPath(); bImg.setMask(bMask.createGeometryMask());
-                this.dynamicImagesGroup.add(bImg); this.dynamicImagesGroup.add(bMask);
-            } else {
-                bridgeGfx.fillStyle(0x8D6E63, 1); bridgeGfx.beginPath();
-                bridgeGfx.moveTo(b_tl.x, b_tl.y); bridgeGfx.lineTo(b_tr.x, b_tr.y); bridgeGfx.lineTo(b_br.x, b_br.y); bridgeGfx.lineTo(b_bl.x, b_bl.y);
-                bridgeGfx.closePath(); bridgeGfx.fillPath();
-            }
-            bridgeGfx.lineStyle(4, 0x000000, 1); bridgeGfx.beginPath();
-            bridgeGfx.moveTo(b_tl.x, b_tl.y); bridgeGfx.lineTo(b_tr.x, b_tr.y); bridgeGfx.lineTo(b_br.x, b_br.y); bridgeGfx.lineTo(b_bl.x, b_bl.y);
-            bridgeGfx.closePath(); bridgeGfx.strokePath();
-        }
-
-        if (this.playerContainer) {
+        if (this.playerContainer && this.bridgeVisualY !== undefined) {
             let pRow = this.playerLogic.y; let pCol = this.playerLogic.x;
             let playerDepth = (pRow + 2) * 30 + (pCol + 2) * 2 + 5;
             if (this.bridgeLogic && pRow === this.bridgeLogic.y && pCol === this.bridgeLogic.x) {
@@ -821,6 +764,79 @@ class GameScene extends Phaser.Scene {
             this.playerContainer.setDepth(playerDepth);
         }
         this.hitboxesCreated = true;
+    }
+
+    // פונקציה חסכונית שרק מזיזה את אובייקט הגשר הקיים 
+    updateBridgeVisuals() {
+        if (!this.bridgeLogic || this.bridgeVisualX === undefined) return;
+
+        let brH = -5;
+        const b_tl = this.getPerspective(this.bridgeVisualX - 0.5, this.bridgeVisualY - 0.5, brH);
+        const b_tr = this.getPerspective(this.bridgeVisualX + 0.5, this.bridgeVisualY - 0.5, brH);
+        const b_bl = this.getPerspective(this.bridgeVisualX - 0.5, this.bridgeVisualY + 0.5, brH);
+        const b_br = this.getPerspective(this.bridgeVisualX + 0.5, this.bridgeVisualY + 0.5, brH);
+
+        let frontRow = Math.ceil(this.bridgeVisualY); let frontCol = Math.ceil(this.bridgeVisualX);
+        let bridgeDepth = (frontRow + 2) * 30 + (frontCol + 2) * 2 + 3;
+
+        this.bridgeObj.gfx.clear();
+        this.bridgeObj.gfx.setDepth(bridgeDepth);
+
+        if (this.bridgeObj.img) {
+            const bCX = (b_tl.x + b_tr.x + b_bl.x + b_br.x) / 4; const bCY = (b_tl.y + b_tr.y + b_bl.y + b_br.y) / 4;
+            const bW = Math.max(b_tl.x, b_tr.x, b_bl.x, b_br.x) - Math.min(b_tl.x, b_tr.x, b_bl.x, b_br.x);
+            const bH = Math.max(b_tl.y, b_tr.y, b_bl.y, b_br.y) - Math.min(b_tl.y, b_tr.y, b_bl.y, b_br.y);
+
+            this.bridgeObj.img.setPosition(bCX, bCY);
+            this.bridgeObj.img.setDisplaySize(bW, bH);
+            this.bridgeObj.img.setDepth(bridgeDepth - 1);
+
+            this.bridgeObj.maskGfx.clear();
+            this.bridgeObj.maskGfx.fillStyle(0xffffff); this.bridgeObj.maskGfx.beginPath();
+            this.bridgeObj.maskGfx.moveTo(b_tl.x, b_tl.y); this.bridgeObj.maskGfx.lineTo(b_tr.x, b_tr.y);
+            this.bridgeObj.maskGfx.lineTo(b_br.x, b_br.y); this.bridgeObj.maskGfx.lineTo(b_bl.x, b_bl.y);
+            this.bridgeObj.maskGfx.closePath(); this.bridgeObj.maskGfx.fillPath();
+        } else {
+            this.bridgeObj.gfx.fillStyle(0x8D6E63, 1); this.bridgeObj.gfx.beginPath();
+            this.bridgeObj.gfx.moveTo(b_tl.x, b_tl.y); this.bridgeObj.gfx.lineTo(b_tr.x, b_tr.y);
+            this.bridgeObj.gfx.lineTo(b_br.x, b_br.y); this.bridgeObj.gfx.lineTo(b_bl.x, b_bl.y);
+            this.bridgeObj.gfx.closePath(); this.bridgeObj.gfx.fillPath();
+        }
+
+        this.bridgeObj.gfx.lineStyle(4, 0x000000, 1); this.bridgeObj.gfx.beginPath();
+        this.bridgeObj.gfx.moveTo(b_tl.x, b_tl.y); this.bridgeObj.gfx.lineTo(b_tr.x, b_tr.y);
+        this.bridgeObj.gfx.lineTo(b_br.x, b_br.y); this.bridgeObj.gfx.lineTo(b_bl.x, b_bl.y);
+        this.bridgeObj.gfx.closePath(); this.bridgeObj.gfx.strokePath();
+    }
+
+    // פונקציה חסכונית שרק משנה טקסטורה של התמונה השמורה 
+    updateTrapsVisuals() {
+        this.spikeTraps.forEach(trap => {
+            let key = `${trap.x}_${trap.y}`;
+            if (this.trapObjects && this.trapObjects[key]) {
+                const textureKey = trap.active ? 'tex_trap_on' : 'tex_trap_off';
+                if (this.trapObjects[key].img && this.textures.exists(textureKey)) {
+                    this.trapObjects[key].img.setTexture(textureKey); // החלפת תמונה ללא יצירה מאפס!
+                }
+                
+                this.trapObjects[key].spikeGfx.clear();
+                if (trap.active) {
+                    const tl = this.getPerspective(trap.x - 0.5, trap.y - 0.5, 0);
+                    const br = this.getPerspective(trap.x + 0.5, trap.y + 0.5, 0);
+                    const spikeTop = this.getPerspective(trap.x, trap.y, 30);
+                    
+                    this.trapObjects[key].spikeGfx.fillStyle(0xFF3333, 1);
+                    this.trapObjects[key].spikeGfx.lineStyle(2, 0x000000, 1);
+                    this.trapObjects[key].spikeGfx.beginPath();
+                    this.trapObjects[key].spikeGfx.moveTo(tl.x + 10*tl.scale, tl.y + 10*tl.scale);
+                    this.trapObjects[key].spikeGfx.lineTo(br.x - 10*br.scale, br.y - 10*br.scale);
+                    this.trapObjects[key].spikeGfx.lineTo(spikeTop.x, spikeTop.y);
+                    this.trapObjects[key].spikeGfx.closePath();
+                    this.trapObjects[key].spikeGfx.fillPath();
+                    this.trapObjects[key].spikeGfx.strokePath();
+                }
+            }
+        });
     }
 
     drawPathBox(rows) {
@@ -1369,6 +1385,7 @@ class GameScene extends Phaser.Scene {
 
     updateDynamicElements() {
         this.spikeTraps.forEach(s => s.active = !s.active);
+        this.updateTrapsVisuals(); // מעדכן טקסטורות מיידית בלי ליצור אובייקטים חדשים!
 
         let playerOnBridge = false;
         if (this.bridgeLogic && this.playerLogic.x === this.bridgeLogic.x && this.playerLogic.y === this.bridgeLogic.y) {
@@ -1384,28 +1401,31 @@ class GameScene extends Phaser.Scene {
 
                 if (this.bridgeLogic.axis === 'x') {
                     targetX += this.bridgeLogic.dir;
-                    if (targetX >= this.bridgeLogic.max || targetX <= this.bridgeLogic.min) { 
-                        this.bridgeLogic.dir *= -1; 
-                    }
+                    if (targetX >= this.bridgeLogic.max || targetX <= this.bridgeLogic.min) { this.bridgeLogic.dir *= -1; }
                 } else {
                     targetY += this.bridgeLogic.dir;
-                    if (targetY >= this.bridgeLogic.max || targetY <= this.bridgeLogic.min) { 
-                        this.bridgeLogic.dir *= -1; 
-                    }
+                    if (targetY >= this.bridgeLogic.max || targetY <= this.bridgeLogic.min) { this.bridgeLogic.dir *= -1; }
                 }
                 this.bridgeLogic.pauseTimer = 1; 
 
                 this.bridgeLogic.x = targetX;
                 this.bridgeLogic.y = targetY;
 
-                // האנימציה החלקה מחליפה את ה-Update! הוא מצייר רק כשהגשר בתנועה
+                // אנימציה חלקה - בלי למחוק מסכות!
                 this.tweens.add({
                     targets: this,
                     bridgeVisualX: targetX,
                     bridgeVisualY: targetY,
                     duration: 350,
                     ease: 'Sine.easeInOut',
-                    onUpdate: () => this.drawRealisticGrid()
+                    onUpdate: () => {
+                        this.updateBridgeVisuals();
+                        if (playerOnBridge && this.playerContainer) {
+                            // שומר על עומק מדויק לשחקן כדי שלא ישקע בגשר
+                            let pDepth = (Math.ceil(this.bridgeVisualY) + 2) * 30 + (Math.ceil(this.bridgeVisualX) + 2) * 2 + 5;
+                            this.playerContainer.setDepth(pDepth);
+                        }
+                    }
                 });
             }
         }
@@ -1414,9 +1434,6 @@ class GameScene extends Phaser.Scene {
             this.playerLogic.x = this.bridgeLogic.x;
             this.playerLogic.y = this.bridgeLogic.y;
         }
-
-        // מצייר מחדש (למקרה שהמלכודות התהפכו אבל הגשר לא זז)
-        this.drawRealisticGrid();
     }
 
     executeNextAction() {
