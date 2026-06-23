@@ -641,7 +641,7 @@ class GameScene extends Phaser.Scene {
             this.trapObjects = {}; 
             this.bridgeObj = { gfx: this.add.graphics(), img: null, maskGfx: null }; 
 
-            // --- 1. צללית (Depth 0) ---
+            // --- 1. צללית רקע (Depth 0) ---
             let shadowGfx = this.add.graphics();
             for (let i = 1; i <= 5; i++) {
                 const s_tl = this.getPerspective(-1, -1, -15); const s_tr = this.getPerspective(this.gridSize, -1, -15);
@@ -653,7 +653,7 @@ class GameScene extends Phaser.Scene {
             }
             shadowGfx.setDepth(0);
 
-            // --- 2. מים גלובליים (אנימציה אחת ויחידה לכל הנהר!) ---
+            // --- 2. מים גלובליים (אנימציה אחת בלבד לכל המפה!) ---
             this.waterMask = this.make.graphics();
             this.waterMask.fillStyle(0xffffff);
             this.waterMask.beginPath();
@@ -661,13 +661,13 @@ class GameScene extends Phaser.Scene {
             let waterSprite = this.add.sprite(this.scale.width/2, this.scale.height/2, 'tex_water');
             if (this.anims && this.anims.exists('water_flow')) waterSprite.play('water_flow', true);
             waterSprite.setDisplaySize(this.scale.width, this.scale.height);
-            waterSprite.setDepth(10); // המים יושבים הכי למטה
+            waterSprite.setDepth(10); // יושב עמוק למטה
             waterSprite.setMask(this.waterMask.createGeometryMask());
 
-            // --- 3. אפייה (Baking) של המפה שורה אחר שורה לתמונות שטוחות! ---
+            // --- 3. אפייה (Baking) - שורה אחר שורה ---
             for (let row = -1; row <= this.gridSize; row++) {
                 let rowGroup = this.add.group();
-                let baseRowDepth = (row + 2) * 30; // עומק חכם לשורה
+                let baseRowDepth = (row + 2) * 30;
                 
                 for (let col = -1; col <= this.gridSize; col++) {
                     let isExternalWall = (row === -1 || col === -1 || col === this.gridSize);
@@ -692,10 +692,10 @@ class GameScene extends Phaser.Scene {
                     if (isExternalWall) { topColor = this.currentBiome.wall; sideColor = this.currentBiome.wallDark; textureKey = 'tex_wall'; } 
                     else if (tileType === 9) { topColor = '#FFD54F'; sideColor = '#FFB300'; textureKey = 'tex_exit'; } 
                     else if (tileType === 2) { 
-                        // מצייר חור במסיכה הגלובלית עבור הנהר!
+                        // מצייר רק חור במים הגלובליים, בלי ליצור אובייקט!
                         this.waterMask.moveTo(tl.x, tl.y); this.waterMask.lineTo(tr.x, tr.y);
                         this.waterMask.lineTo(br.x, br.y); this.waterMask.lineTo(bl.x, bl.y);
-                        continue; // מדלג על הציור כי המים הגדולים ייראו דרך החור
+                        continue; 
                     } 
                     else if (tileType === 0) { topColor = this.currentBiome.floor; sideColor = this.currentBiome.floorDark; textureKey = this.textures.exists('custom_floor') ? 'custom_floor' : 'tex_floor'; } 
                     else if (tileType === 1) { topColor = this.currentBiome.wall; sideColor = this.currentBiome.wallDark; textureKey = this.textures.exists('custom_wall') ? 'custom_wall' : 'tex_wall'; }
@@ -745,6 +745,7 @@ class GameScene extends Phaser.Scene {
 
                     rowGroup.add(localGfx);
 
+                    // שומרים את המלכודות מחוץ לאפייה כדי שיישארו דינמיות!
                     if (tileType === 3) {
                         let spikeGfx = this.add.graphics(); spikeGfx.setDepth(baseRowDepth + 3);
                         if (topImg) topImg.setDepth(baseRowDepth + 2);
@@ -752,16 +753,18 @@ class GameScene extends Phaser.Scene {
                     }
                 }
                 
-                // אפיית השורה במלואה והשמדת המסכות הכבדות! (הסוד ל-60FPS)
-                let rowRT = this.add.renderTexture(0, 0, this.scale.width, this.scale.height);
-                rowRT.draw(rowGroup);
-                rowRT.setDepth(baseRowDepth); 
-                rowGroup.clear(true, true); 
+                // הופך את כל השורה לתמונה שטוחה אחת (Baking) ומשמיד את המסכות מהזיכרון!
+                if (rowGroup.getChildren().length > 0) {
+                    let rowRT = this.add.renderTexture(0, 0, this.scale.width, this.scale.height);
+                    rowRT.draw(rowGroup);
+                    rowRT.setDepth(baseRowDepth); 
+                    rowGroup.clear(true, true); 
+                }
             }
 
             this.waterMask.closePath(); this.waterMask.fillPath();
 
-            // --- 4. הכנת אובייקט הגשר בזיכרון ---
+            // --- 4. הגשר נשאר חי בשכבה שלו ---
             if (this.bridgeLogic) {
                 if (this.textures.exists('tex_bridge')) {
                     this.bridgeObj.img = this.add.image(0, 0, 'tex_bridge');
@@ -774,9 +777,10 @@ class GameScene extends Phaser.Scene {
         this.updateBridgeVisuals();
         this.updateTrapsVisuals();
 
+        // עדכון עומק השחקן לפי השכבות החדשות
         if (this.playerContainer && this.bridgeVisualY !== undefined) {
             let pRow = this.playerLogic.y; 
-            let playerDepth = (pRow + 2) * 30 + 26; // מעל המלכודות
+            let playerDepth = (pRow + 2) * 30 + 26; // מעל המלכודות הרגילות
             if (this.bridgeLogic && pRow === this.bridgeLogic.y && this.playerLogic.x === this.bridgeLogic.x) {
                 let frontRow = Math.ceil(this.bridgeVisualY); 
                 playerDepth = (frontRow + 2) * 30 + 28; // מעל הגשר
@@ -849,6 +853,58 @@ class GameScene extends Phaser.Scene {
                 }
             }
         });
+    }
+
+    updatePlayerVisualPosition(duration = 0) {
+        let height = 0;
+        let isMovingBridge = (this.bridgeLogic && this.bridgeLogic.x === this.playerLogic.x && this.bridgeLogic.y === this.playerLogic.y);
+        const tileType = this.mapData[this.playerLogic.y]?.[this.playerLogic.x] || 0;
+        
+        if (isMovingBridge || tileType === 4) height = 5;
+        else {
+            if (tileType === 1) height = 50;
+            if (tileType === 2) height = -15;
+        }
+
+        const pos = this.getPerspective(this.playerLogic.x, this.playerLogic.y, height);
+        
+        if (this.playerSprite) {
+            let skinConfig = window.OwnedAssets.skins.find(s => s.id === window.PlayerData.currentSkin);
+            this.playerSprite.setTexture(`${skinConfig.id}_${this.playerLogic.direction}`);
+        } else {
+            const eyeOffsets = [{x: 8, y:0}, {x:0, y:8}, {x:-8, y:0}, {x:0, y:-8}];
+            this.eyeGraphics.setPosition(eyeOffsets[this.playerLogic.direction].x, eyeOffsets[this.playerLogic.direction].y);
+        }
+
+        if (this.playerContainer) {
+            let pRow = this.playerLogic.y; 
+            let playerDepth = (pRow + 2) * 30 + 26;
+            if (this.bridgeLogic && pRow === this.bridgeLogic.y && this.playerLogic.x === this.bridgeLogic.x) {
+                let frontRow = Math.ceil(this.bridgeVisualY !== undefined ? this.bridgeVisualY : this.bridgeLogic.y);
+                playerDepth = (frontRow + 2) * 30 + 28;
+            }
+            this.playerContainer.setDepth(playerDepth);
+        }
+
+        if (duration > 0) {
+            this.tweens.add({
+                targets: this.playerContainer, x: pos.x, y: pos.y, scaleX: pos.scale, scaleY: pos.scale,
+                duration: duration, ease: 'Linear',
+                onUpdate: (tween) => {
+                    const jumpHeight = Math.sin(tween.progress * Math.PI) * 40 * pos.scale;
+                    if (this.playerGraphic) { this.playerGraphic.y = -jumpHeight; this.eyeGraphics.y = -jumpHeight; }
+                    if (this.playerSprite) { this.playerSprite.y = -40 - jumpHeight; }
+                },
+                onComplete: () => {
+                    if (this.playerGraphic) { this.playerGraphic.y = 0; this.eyeGraphics.y = 0; }
+                    if (this.playerSprite) { this.playerSprite.y = -40; }
+                    this.checkCollisions(); this.executeNextAction();
+                }
+            });
+        } else {
+            this.playerContainer.setPosition(pos.x, pos.y);
+            this.playerContainer.setScale(pos.scale);
+        }
     }
 
     drawPathBox(rows) {
@@ -1346,54 +1402,6 @@ class GameScene extends Phaser.Scene {
         });
     }
 
-
-    updatePlayerVisualPosition(duration = 0) {
-        let height = 0;
-        let isMovingBridge = (this.bridgeLogic && this.bridgeLogic.x === this.playerLogic.x && this.bridgeLogic.y === this.playerLogic.y);
-        const tileType = this.mapData[this.playerLogic.y]?.[this.playerLogic.x] || 0;
-        
-        if (isMovingBridge || tileType === 4) height = 5;
-        else {
-            if (tileType === 1) height = 50;
-            if (tileType === 2) height = -15;
-        }
-
-        const pos = this.getPerspective(this.playerLogic.x, this.playerLogic.y, height);
-        
-        // עדכון כיוון השחקן (עיניים או תמונה)
-        if (this.playerSprite) {
-            let skinConfig = window.OwnedAssets.skins.find(s => s.id === window.PlayerData.currentSkin);
-            this.playerSprite.setTexture(`${skinConfig.id}_${this.playerLogic.direction}`);
-        } else {
-            const eyeOffsets = [{x: 8, y:0}, {x:0, y:8}, {x:-8, y:0}, {x:0, y:-8}];
-            this.eyeGraphics.setPosition(eyeOffsets[this.playerLogic.direction].x, eyeOffsets[this.playerLogic.direction].y);
-        }
-
-        if (this.playerContainer) {
-            let playerDepth = (this.playerLogic.y + 2) * 30 + (this.playerLogic.x + 2) * 2 + 5;
-            this.playerContainer.setDepth(playerDepth);
-        }
-
-        if (duration > 0) {
-            this.tweens.add({
-                targets: this.playerContainer, x: pos.x, y: pos.y, scaleX: pos.scale, scaleY: pos.scale,
-                duration: duration, ease: 'Linear',
-                onUpdate: (tween) => {
-                    const jumpHeight = Math.sin(tween.progress * Math.PI) * 40 * pos.scale;
-                    if (this.playerGraphic) { this.playerGraphic.y = -jumpHeight; this.eyeGraphics.y = -jumpHeight; }
-                    if (this.playerSprite) { this.playerSprite.y = -40 - jumpHeight; }
-                },
-                onComplete: () => {
-                    if (this.playerGraphic) { this.playerGraphic.y = 0; this.eyeGraphics.y = 0; }
-                    if (this.playerSprite) { this.playerSprite.y = -40; }
-                    this.checkCollisions(); this.executeNextAction();
-                }
-            });
-        } else {
-            this.playerContainer.setPosition(pos.x, pos.y);
-            this.playerContainer.setScale(pos.scale);
-        }
-    }
 
     updateDynamicElements() {
         this.spikeTraps.forEach(s => s.active = !s.active);
