@@ -24,9 +24,7 @@ class BootScene extends Phaser.Scene {
         this.load.image('tex_crystal', 'assets/images/crystal.png');     
         this.load.image('tex_exit', 'assets/images/exit.png');           
         this.load.spritesheet('tex_water', 'assets/images/water_spritesheet.png', { frameWidth: 128, frameHeight: 128 });
-        
-        const defaultBG = window.OwnedAssets.bgs.find(b => b.id === 'default');
-        this.load.image(defaultBG.id, defaultBG.image);
+        this.load.image('default', 'assets/images/bg_game.png'); // טוען את הרקע הדיפולטיבי קבוע מראש
     }
 
     async create() {
@@ -231,9 +229,9 @@ class ShopScene extends Phaser.Scene {
             currentY += (Math.ceil(items.length / 2) * yOffset) - 60; 
         };
 
-        createSection('--- THEMES & BGS ---', dailyData.shop.bgs);
-        createSection('--- TEXTURE PACKS ---', dailyData.shop.packs);
-        createSection('--- PLAYER SKINS ---', dailyData.shop.skins);
+        createSection('--- THEMES & BGS ---', dailyData.bgs);
+        createSection('--- TEXTURE PACKS ---', dailyData.packs);
+        createSection('--- PLAYER SKINS ---', dailyData.skins);
 
         this.maxScroll = Math.max(0, currentY - this.scale.height + 200);
     }
