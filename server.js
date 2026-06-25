@@ -202,7 +202,9 @@ class ServerLevelGenerator {
         while (queue.length > 0) {
             let curr = queue.shift(); if (curr.t > 40) continue;
             if (curr.x === 6 && curr.y === 0 && curr.mask === 7) { validSolutions.push(curr); continue; }
-            let nTime = curr.t + 1, trapsFlipped = (nTime % 2 !== 0), curBx = -1, curBy = -1;
+            let nTime = curr.t + 1, curBx = -1, curBy = -1;
+            let tTimer = 1, trapsFlipped = false;
+            for(let i=0; i<nTime; i++){ if(tTimer > 0) tTimer--; else { trapsFlipped = !trapsFlipped; tTimer = 1; } }
             if (this.bridgeLogic) {
                 curBx = this.bridgeLogic.x; curBy = this.bridgeLogic.y; let bDir = this.bridgeLogic.initialDir, bPos = this.bridgeLogic.initialPos, bTimer = 1;
                 for (let i = 0; i < nTime; i++) { if (bTimer > 0) bTimer--; else { bPos += bDir; if (bPos >= this.bridgeLogic.max || bPos <= this.bridgeLogic.min) bDir *= -1; bTimer = 1; } }
@@ -296,14 +298,15 @@ app.post('/api/lose_life', authenticateUser, async (req, res) => {
 
 // ניצחון מבוקר שרת (השרת מחשב את הכסף!)
 app.post('/api/win', authenticateUser, async (req, res) => {
-    const { actionCost } = req.body;
+    const { actionCost, triesUsed } = req.body;
     let player = await User.findOne({ discordId: req.discordId });
     const todayData = getTodayShopAndLevel();
 
     if (player.lastSolvedLevel === todayData.levelNumber) return res.status(400).send("Already solved today");
 
     let efficiencyBonus = Math.max(0, (todayData.parScore - actionCost) * 200);
-    let totalScore = (3 * 1000) - (actionCost * 100) + efficiencyBonus;
+    let triesPenalty = Math.max(0, ((triesUsed || 1) - 1) * 300); // מוריד 300 נקודות על כל נסיון נוסף!
+    let totalScore = (3 * 1000) - (actionCost * 100) - triesPenalty + efficiencyBonus;
     let earnedCoins = Math.max(10, Math.floor(totalScore / 10));
 
     player.coins += earnedCoins;
@@ -434,6 +437,7 @@ app.post('/api/announce', authenticateUser, async (req, res) => {
         ctx.fillText(`💎 Crystals:    ${crystals}/3`, 480, 370);
         ctx.fillText(`🧩 Moves:       ${moves}`, 480, 440);
 
+        // 5. שליחה לערוץ בדיסקורד
         // 5. שליחה לערוץ בדיסקורד
         const buffer = canvas.toBuffer('image/png');
         const channel = client.channels.cache.get(channelId);
