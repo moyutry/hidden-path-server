@@ -2,11 +2,9 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const dotenv = require('dotenv');
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, AttachmentBuilder, Routes } = require('discord.js');
 const mongoose = require('mongoose'); // הספרייה שמדברת עם מסד הנתונים
 const { createCanvas, loadImage } = require('canvas');
-const { AttachmentBuilder } = require('discord.js');
-// טוען משתני סביבה מה-.env
 dotenv.config();
 
 const app = express();
@@ -71,14 +69,21 @@ client.once('ready', async () => {
     } catch (e) { console.error("Could not register command:", e); }
 });
 
-// מאזין לפקודה שעשינו ומגיב
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     if (interaction.commandName === 'pathway') {
-        await interaction.reply({ 
-            content: '🚀 **Ready to play?** Click the Rocket Icon (App Launcher) below the chat and select **The Hidden Path** to start your adventure!', 
-            ephemeral: true 
-        });
+        try {
+            // קוד סודי (12) שגורם לדיסקורד לפתוח את המשחק (Activity) מיד!
+            await client.rest.post(Routes.interactionCallback(interaction.id, interaction.token), {
+                body: { type: 12 } 
+            });
+        } catch (e) {
+            console.error("Activity Launch Error:", e);
+            await interaction.reply({ 
+                content: '🚀 **Ready to play?** Click the Rocket Icon below the chat to start **The Hidden Path**!', 
+                ephemeral: true 
+            });
+        }
     }
 });
 
@@ -345,26 +350,37 @@ app.post('/api/buy', authenticateUser, async (req, res) => {
 });
 
 app.post('/api/announce', authenticateUser, async (req, res) => {
-    const { channelId, username, avatarUrl, isWin, score, tries, crystals, moves, biome, themeColor, skin, bgTheme } = req.body;
+    const { channelId, username, avatarUrl, isWin, score, tries, crystals, moves, biome, themeColor, skin, bgTheme, pack } = req.body;
     if (!channelId) return res.status(400).send("No channel ID");
 
     try {
         const canvas = createCanvas(900, 500);
         const ctx = canvas.getContext('2d');
         
-        // 1. רקע (מעבר צבעים דינמי לפי ה-THEME של השחקן)
-        const gradient = ctx.createLinearGradient(0, 0, 900, 500);
-        if (bgTheme) {
-            gradient.addColorStop(0, '#' + bgTheme.uiDark.toString(16).padStart(6, '0'));
-            gradient.addColorStop(1, '#' + bgTheme.uiMain.toString(16).padStart(6, '0'));
+        // 1. ציור רקע (אם יש לשחקן תמונת רקע קנויה - מציירים אותה! אחרת - גרדיאנט)
+        if (bgTheme && bgTheme.image) {
+            try {
+                let bgPath = bgTheme.image.startsWith('http') ? bgTheme.image : path.join(__dirname, 'public', bgTheme.image);
+                const bgImg = await loadImage(bgPath);
+                ctx.drawImage(bgImg, 0, 0, 900, 500);
+            } catch(e) { drawGradient(ctx, bgTheme); }
         } else {
-            gradient.addColorStop(0, '#2E3136');
-            gradient.addColorStop(1, '#1E1E24');
+            drawGradient(ctx, bgTheme);
         }
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 900, 500);
 
-        // 2. אווטאר ושם שחקן (למעלה משמאל)
+        function drawGradient(ctx, bgTheme) {
+            const gradient = ctx.createLinearGradient(0, 0, 900, 500);
+            if (bgTheme) {
+                gradient.addColorStop(0, '#' + (bgTheme.uiDark||12720219).toString(16).padStart(6, '0'));
+                gradient.addColorStop(1, '#' + (bgTheme.uiMain||16301008).toString(16).padStart(6, '0'));
+            } else {
+                gradient.addColorStop(0, '#2E3136'); gradient.addColorStop(1, '#1E1E24');
+            }
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 900, 500);
+        }
+
+        // 2. אווטאר ושם שחקן 
         try {
             if (avatarUrl) {
                 const avatar = await loadImage(avatarUrl);
@@ -376,6 +392,72 @@ app.post('/api/announce', authenticateUser, async (req, res) => {
                 ctx.beginPath(); ctx.arc(70, 70, 45, 0, Math.PI * 2); ctx.stroke();
             }
         } catch(e) {}
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 45px sans-serif';
+        ctx.fillText(username || "Player", 140, 85);
+
+        // 3. יצירת הטקסטורות של הקיר והרצפה וציורם
+        let wallPattern = null, floorPattern = null;
+        if (pack && pack.textures) {
+            try {
+                if (pack.textures.wall) {
+                    let wPath = pack.textures.wall.startsWith('http') ? pack.textures.wall : path.join(__dirname, 'public', pack.textures.wall);
+                    wallPattern = ctx.createPattern(await loadImage(wPath), 'repeat');
+                }
+                if (pack.textures.floor) {
+                    let fPath = pack.textures.floor.startsWith('http') ? pack.textures.floor : path.join(__dirname, 'public', pack.textures.floor);
+                    floorPattern = ctx.createPattern(await loadImage(fPath), 'repeat');
+                }
+            } catch(e) {}
+        }
+
+        // קיר
+        ctx.fillStyle = wallPattern || biome.wallDark || '#5D4037';
+        ctx.fillRect(50, 180, 350, 200); 
+        ctx.fillStyle = wallPattern || biome.wall || '#795548';
+        ctx.fillRect(50, 180, 330, 180); 
+        ctx.lineWidth = 5; ctx.strokeStyle = '#000000';
+        ctx.strokeRect(50, 180, 350, 200);
+
+        // רצפה
+        ctx.fillStyle = floorPattern || biome.floorDark || '#558B2F';
+        ctx.beginPath(); ctx.moveTo(30, 380); ctx.lineTo(400, 380); ctx.lineTo(450, 500); ctx.lineTo(-20, 500);
+        ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = floorPattern || biome.floor || '#8BC34A';
+        ctx.beginPath(); ctx.moveTo(50, 380); ctx.lineTo(380, 380); ctx.lineTo(420, 480); ctx.lineTo(10, 480);
+        ctx.fill();
+
+        // ציור השחקן
+        if (skin && !skin.isDefault && skin.dirs && skin.dirs[3]) {
+            try {
+                let imgPath = skin.dirs[3].startsWith('http') ? skin.dirs[3] : path.join(__dirname, 'public', skin.dirs[3]);
+                const skinImg = await loadImage(imgPath);
+                let drawScale = skin.scale || 1;
+                let size = 90 * drawScale;
+                ctx.drawImage(skinImg, 220 - size/2, 370 - size/2, size, size);
+            } catch(e) { drawDefaultPlayer(ctx); }
+        } else {
+            drawDefaultPlayer(ctx);
+        }
+
+        function drawDefaultPlayer(ctx) {
+            ctx.fillStyle = '#FF5252';
+            ctx.beginPath(); ctx.arc(220, 370, 45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#FFF';
+            ctx.beginPath(); ctx.arc(205, 360, 12, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(235, 360, 12, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.arc(205, 360, 5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(235, 360, 5, 0, Math.PI*2); ctx.fill();
+        }
+
+        // 4. נתונים מיושרים לפי הסקיצה (צד ימין - הצבעים נמשכים מה-THEME)
+        ctx.fillStyle = themeColor || '#FFD54F';
+        ctx.font = 'bold 120px sans-serif';
+        ctx.fillText(score.toString(), 480, 200);
+        ctx.lineWidth = 3; ctx.strokeStyle = '#000000'; ctx.strokeText(score.toString(), 480, 200);
 
         ctx.fillStyle = '#FFFFFF';
         ctx.font = 'bold 45px sans-serif';
