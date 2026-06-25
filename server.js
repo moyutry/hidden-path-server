@@ -342,17 +342,22 @@ app.post('/api/buy', authenticateUser, async (req, res) => {
 });
 
 app.post('/api/announce', authenticateUser, async (req, res) => {
-    const { channelId, username, avatarUrl, isWin, score, tries, crystals, moves, biome, themeColor } = req.body;
+    const { channelId, username, avatarUrl, isWin, score, tries, crystals, moves, biome, themeColor, skin, bgTheme } = req.body;
     if (!channelId) return res.status(400).send("No channel ID");
 
     try {
         const canvas = createCanvas(900, 500);
         const ctx = canvas.getContext('2d');
         
-        // 1. רקע (מעבר צבעים כהה יוקרתי)
+        // 1. רקע (מעבר צבעים דינמי לפי ה-THEME של השחקן)
         const gradient = ctx.createLinearGradient(0, 0, 900, 500);
-        gradient.addColorStop(0, '#2E3136');
-        gradient.addColorStop(1, '#1E1E24');
+        if (bgTheme) {
+            gradient.addColorStop(0, '#' + bgTheme.uiDark.toString(16).padStart(6, '0'));
+            gradient.addColorStop(1, '#' + bgTheme.uiMain.toString(16).padStart(6, '0'));
+        } else {
+            gradient.addColorStop(0, '#2E3136');
+            gradient.addColorStop(1, '#1E1E24');
+        }
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, 900, 500);
 
@@ -374,7 +379,6 @@ app.post('/api/announce', authenticateUser, async (req, res) => {
         ctx.fillText(username || "Player", 140, 85);
 
         // 3. ציור הרצפה והקיר על בסיס הטקסטורה של השחקן (Biome)
-        // קיר
         ctx.fillStyle = biome.wallDark || '#5D4037';
         ctx.fillRect(50, 180, 350, 200); 
         ctx.fillStyle = biome.wall || '#795548';
@@ -382,7 +386,6 @@ app.post('/api/announce', authenticateUser, async (req, res) => {
         ctx.lineWidth = 5; ctx.strokeStyle = '#000000';
         ctx.strokeRect(50, 180, 350, 200);
 
-        // רצפה
         ctx.fillStyle = biome.floorDark || '#558B2F';
         ctx.beginPath(); ctx.moveTo(30, 380); ctx.lineTo(400, 380); ctx.lineTo(450, 500); ctx.lineTo(-20, 500);
         ctx.fill(); ctx.stroke();
@@ -391,16 +394,33 @@ app.post('/api/announce', authenticateUser, async (req, res) => {
         ctx.beginPath(); ctx.moveTo(50, 380); ctx.lineTo(380, 380); ctx.lineTo(420, 480); ctx.lineTo(10, 480);
         ctx.fill();
 
-        // השחקן (קובייה/עיגול אדום עם עיניים)
-        ctx.fillStyle = '#FF5252';
-        ctx.beginPath(); ctx.arc(220, 370, 45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        
-        ctx.fillStyle = '#FFF';
-        ctx.beginPath(); ctx.arc(205, 360, 12, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(235, 360, 12, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#000';
-        ctx.beginPath(); ctx.arc(205, 360, 5, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(235, 360, 5, 0, Math.PI*2); ctx.fill();
+        // ציור השחקן (תמונה אם יש סקין, ואם זה דיפולט מציירים עיגול אדום עם עיניים)
+        if (skin && !skin.isDefault && skin.dirs && skin.dirs[3]) {
+            try {
+                let imgPath = skin.dirs[3].startsWith('http') ? skin.dirs[3] : path.join(__dirname, 'public', skin.dirs[3]);
+                const skinImg = await loadImage(imgPath);
+                let drawScale = skin.scale || 1;
+                let size = 90 * drawScale;
+                ctx.drawImage(skinImg, 220 - size/2, 370 - size/2, size, size);
+            } catch(e) { drawDefaultPlayer(ctx); }
+        } else {
+            drawDefaultPlayer(ctx);
+        }
+
+        function drawDefaultPlayer(ctx) {
+            ctx.fillStyle = '#FF5252';
+            ctx.beginPath(); ctx.arc(220, 370, 45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            
+            ctx.fillStyle = '#FFF';
+            ctx.beginPath(); ctx.arc(205, 360, 12, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(235, 360, 12, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.arc(205, 360, 5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(235, 360, 5, 0, Math.PI*2); ctx.fill();
+        }
+
+        // 4. נתונים מיושרים לפי הסקיצה (צד ימין - הצבעים עכשיו נמשכים מה-THEME)
+        ctx.fillStyle = themeColor || '#FFD54F';
 
         // 4. נתונים מיושרים לפי הסקיצה (צד ימין)
         ctx.fillStyle = themeColor || '#FFD54F';
