@@ -351,11 +351,12 @@ async function generateResultImage(stats, streak, member) {
     ctx.beginPath(); ctx.moveTo(0, 420); ctx.lineTo(440, 420); ctx.lineTo(440, 450); ctx.lineTo(0, 450); ctx.fill(); ctx.stroke();
 
     // ציור השחקן (תוקן כדי שלא ייצא פצפון!)
-    if (skin && !skin.isDefault && skin.dirs && skin.dirs[3]) {
+    if (skin && !skin.isDefault && skin.dirs && skin.dirs[0]) {
         try {
-            let imgPath = skin.dirs[3].startsWith('http') ? skin.dirs[3] : path.join(__dirname, 'public', skin.dirs[3]);
+            // טוען את התמונה מהאינדקס ה-0 כדי שהוא יסתכל "עלינו"
+            let imgPath = skin.dirs[0].startsWith('http') ? skin.dirs[0] : path.join(__dirname, 'public', skin.dirs[0]);
             const skinImg = await loadImage(imgPath);
-            let size = 95; // גודל קבוע במקום להסתמך על סקייל פנימי של המשחק
+            let size = 95; 
             ctx.drawImage(skinImg, 220 - size/2, 340 - size/2, size, size);
         } catch(e) { drawDefaultPlayer(); }
     } else { drawDefaultPlayer(); }
