@@ -1,7 +1,7 @@
 {
     "skins": [
         { "id": "default", "name": "Red Cube", "price": 0, "isDefault": true, "scale": 1 },
-        { "id": "skin_ninja", "name": "Ninja Skin", "price": 500, "scale": 0.5, "dirs": ["assets/images/n_up.png", "assets/images/n_right.png", "assets/images/n_down.png", "assets/images/n_left.png"] },
+        { "id": "skin_ninja", "name": "Ninja Skin", "price": 500, "scale": 0.3, "dirs": ["assets/images/n_up.png", "assets/images/n_right.png", "assets/images/n_down.png", "assets/images/n_left.png"] },
         { "id": "skin_popstar", "name": "Popstar", "price": 1500, "scale": 0.15, "dirs": [] },
         { "id": "skin_robot", "name": "Mecha Suit", "price": 2000, "scale": 0.15, "dirs": [] }
     ],
