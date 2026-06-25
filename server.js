@@ -350,14 +350,22 @@ app.post('/api/buy', authenticateUser, async (req, res) => {
 });
 
 app.post('/api/announce', authenticateUser, async (req, res) => {
-    const { channelId, username, avatarUrl, isWin, score, tries, crystals, moves, biome, themeColor, skin, bgTheme, pack } = req.body;
+    const { channelId, isWin, score, tries, crystals, moves, biome, themeColor, skin, bgTheme, pack } = req.body;
     if (!channelId) return res.status(400).send("No channel ID");
 
     try {
+        const channel = await client.channels.fetch(channelId);
+        const guild = channel.guild;
+        
+        // מושך את הנתונים המדויקים של השחקן מתוך השרת הספציפי הזה (Display Name)
+        const member = await guild.members.fetch(req.discordId).catch(() => null);
+        const finalName = member ? member.displayName : "Player";
+        const finalAvatarUrl = member ? member.displayAvatarURL({ extension: 'png', size: 128 }) : "https://cdn.discordapp.com/embed/avatars/0.png";
+
         const canvas = createCanvas(900, 500);
         const ctx = canvas.getContext('2d');
         
-        // 1. ציור רקע (אם יש לשחקן תמונת רקע קנויה - מציירים אותה! אחרת - גרדיאנט)
+        // ציור רקע קנוי או גרדיאנט דיפולטיבי
         if (bgTheme && bgTheme.image) {
             try {
                 let bgPath = bgTheme.image.startsWith('http') ? bgTheme.image : path.join(__dirname, 'public', bgTheme.image);
@@ -380,37 +388,35 @@ app.post('/api/announce', authenticateUser, async (req, res) => {
             ctx.fillRect(0, 0, 900, 500);
         }
 
-        // 2. אווטאר ושם שחקן 
+        // אווטאר וכינוי דיסקורד (עם פונט יפה ונקי)
         try {
-            if (avatarUrl) {
-                const avatar = await loadImage(avatarUrl);
-                ctx.save();
-                ctx.beginPath(); ctx.arc(70, 70, 45, 0, Math.PI * 2); ctx.clip();
-                ctx.drawImage(avatar, 25, 25, 90, 90);
-                ctx.restore();
-                ctx.lineWidth = 4; ctx.strokeStyle = themeColor || '#FFD54F';
-                ctx.beginPath(); ctx.arc(70, 70, 45, 0, Math.PI * 2); ctx.stroke();
-            }
+            const avatar = await loadImage(finalAvatarUrl);
+            ctx.save();
+            ctx.beginPath(); ctx.arc(70, 70, 45, 0, Math.PI * 2); ctx.clip();
+            ctx.drawImage(avatar, 25, 25, 90, 90);
+            ctx.restore();
+            ctx.lineWidth = 4; ctx.strokeStyle = themeColor || '#FFD54F';
+            ctx.beginPath(); ctx.arc(70, 70, 45, 0, Math.PI * 2); ctx.stroke();
         } catch(e) {}
 
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 45px sans-serif';
-        ctx.fillText(username || "Player", 140, 85);
+        ctx.font = 'bold 50px "Segoe UI", "Helvetica Neue", sans-serif'; 
+        ctx.fillText(finalName, 140, 85);
 
-        // 3. יצירת הטקסטורות של הקיר והרצפה וציורם
+        // טעינת הטקסטורות (אם אין בחבילה, הוא יחפש את הדיפולטיביים בשרת!)
         let wallPattern = null, floorPattern = null;
+        let wPath = path.join(__dirname, 'public', 'assets', 'images', 'wall.png');
+        let fPath = path.join(__dirname, 'public', 'assets', 'images', 'floor.png');
+
         if (pack && pack.textures) {
-            try {
-                if (pack.textures.wall) {
-                    let wPath = pack.textures.wall.startsWith('http') ? pack.textures.wall : path.join(__dirname, 'public', pack.textures.wall);
-                    wallPattern = ctx.createPattern(await loadImage(wPath), 'repeat');
-                }
-                if (pack.textures.floor) {
-                    let fPath = pack.textures.floor.startsWith('http') ? pack.textures.floor : path.join(__dirname, 'public', pack.textures.floor);
-                    floorPattern = ctx.createPattern(await loadImage(fPath), 'repeat');
-                }
-            } catch(e) {}
+            if (pack.textures.wall) wPath = pack.textures.wall.startsWith('http') ? pack.textures.wall : path.join(__dirname, 'public', pack.textures.wall);
+            if (pack.textures.floor) fPath = pack.textures.floor.startsWith('http') ? pack.textures.floor : path.join(__dirname, 'public', pack.textures.floor);
         }
+        
+        try {
+            wallPattern = ctx.createPattern(await loadImage(wPath), 'repeat');
+            floorPattern = ctx.createPattern(await loadImage(fPath), 'repeat');
+        } catch(e) { console.error("Could not load pattern image"); }
 
         // קיר
         ctx.fillStyle = wallPattern || biome.wallDark || '#5D4037';
@@ -453,84 +459,36 @@ app.post('/api/announce', authenticateUser, async (req, res) => {
             ctx.beginPath(); ctx.arc(235, 360, 5, 0, Math.PI*2); ctx.fill();
         }
 
-        // 4. נתונים מיושרים לפי הסקיצה (צד ימין - הצבעים נמשכים מה-THEME)
+        // נתוני הטקסט - ללא אימוג'י בכלל! נקי ומודרני
         ctx.fillStyle = themeColor || '#FFD54F';
-        ctx.font = 'bold 120px sans-serif';
-        ctx.fillText(score.toString(), 480, 200);
-        ctx.lineWidth = 3; ctx.strokeStyle = '#000000'; ctx.strokeText(score.toString(), 480, 200);
+        ctx.font = 'bold 120px "Segoe UI", "Helvetica Neue", sans-serif';
+        ctx.fillText(score.toString(), 480, 210);
+        ctx.lineWidth = 3; ctx.strokeStyle = '#000000'; ctx.strokeText(score.toString(), 480, 210);
 
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 45px sans-serif';
-        ctx.fillText(username || "Player", 140, 85);
-
-        // 3. ציור הרצפה והקיר על בסיס הטקסטורה של השחקן (Biome)
-        ctx.fillStyle = biome.wallDark || '#5D4037';
-        ctx.fillRect(50, 180, 350, 200); 
-        ctx.fillStyle = biome.wall || '#795548';
-        ctx.fillRect(50, 180, 330, 180); 
-        ctx.lineWidth = 5; ctx.strokeStyle = '#000000';
-        ctx.strokeRect(50, 180, 350, 200);
-
-        ctx.fillStyle = biome.floorDark || '#558B2F';
-        ctx.beginPath(); ctx.moveTo(30, 380); ctx.lineTo(400, 380); ctx.lineTo(450, 500); ctx.lineTo(-20, 500);
-        ctx.fill(); ctx.stroke();
-
-        ctx.fillStyle = biome.floor || '#8BC34A';
-        ctx.beginPath(); ctx.moveTo(50, 380); ctx.lineTo(380, 380); ctx.lineTo(420, 480); ctx.lineTo(10, 480);
-        ctx.fill();
-
-        // ציור השחקן (תמונה אם יש סקין, ואם זה דיפולט מציירים עיגול אדום עם עיניים)
-        if (skin && !skin.isDefault && skin.dirs && skin.dirs[3]) {
-            try {
-                let imgPath = skin.dirs[3].startsWith('http') ? skin.dirs[3] : path.join(__dirname, 'public', skin.dirs[3]);
-                const skinImg = await loadImage(imgPath);
-                let drawScale = skin.scale || 1;
-                let size = 90 * drawScale;
-                ctx.drawImage(skinImg, 220 - size/2, 370 - size/2, size, size);
-            } catch(e) { drawDefaultPlayer(ctx); }
-        } else {
-            drawDefaultPlayer(ctx);
-        }
-
-        function drawDefaultPlayer(ctx) {
-            ctx.fillStyle = '#FF5252';
-            ctx.beginPath(); ctx.arc(220, 370, 45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-            
-            ctx.fillStyle = '#FFF';
-            ctx.beginPath(); ctx.arc(205, 360, 12, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(235, 360, 12, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = '#000';
-            ctx.beginPath(); ctx.arc(205, 360, 5, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(235, 360, 5, 0, Math.PI*2); ctx.fill();
-        }
-
-        // 4. נתונים מיושרים לפי הסקיצה (צד ימין - הצבעים עכשיו נמשכים מה-THEME)
-        ctx.fillStyle = themeColor || '#FFD54F';
-
-        // 4. נתונים מיושרים לפי הסקיצה (צד ימין)
-        ctx.fillStyle = themeColor || '#FFD54F';
-        ctx.font = 'bold 120px sans-serif';
-        ctx.fillText(score.toString(), 480, 200);
-        ctx.lineWidth = 3; ctx.strokeText(score.toString(), 480, 200);
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 35px sans-serif';
-        ctx.fillText(`🎯 Tries Used:  ${tries}`, 480, 300);
-        ctx.fillText(`💎 Crystals:    ${crystals}/3`, 480, 370);
-        ctx.fillText(`🧩 Moves:       ${moves}`, 480, 440);
-
-        // 5. שליחה לערוץ בדיסקורד
-        // 5. שליחה לערוץ בדיסקורד
-        const buffer = canvas.toBuffer('image/png');
-        const channel = client.channels.cache.get(channelId);
+        ctx.font = 'bold 38px "Segoe UI", "Helvetica Neue", sans-serif';
         
+        // צבע אפור עדין לכותרות
+        ctx.fillStyle = '#CCCCCC'; 
+        ctx.fillText('Tries Used:', 480, 310);
+        ctx.fillText('Crystals:', 480, 380);
+        ctx.fillText('Moves:', 480, 450);
+
+        // צבע לבן למספרים
+        ctx.fillStyle = '#FFFFFF'; 
+        ctx.fillText(tries.toString(), 720, 310);
+        ctx.fillText(`${crystals}/3`, 720, 380);
+        
+        let displayMoves = (moves !== undefined && moves !== null) ? moves.toString() : '0';
+        ctx.fillText(displayMoves, 720, 450);
+
+        const buffer = canvas.toBuffer('image/png');
         if (channel) {
             const winPhrases = ["cooked this! 🔥", "destroyed the level! 🚀", "is a pure genius! 🧠", "crushed it! 🏆"];
             const losePhrases = ["got lost in the path... 💀", "needs to try again tomorrow. 🔄", "was defeated by the map. 📉"];
             const phrase = isWin ? winPhrases[Math.floor(Math.random() * winPhrases.length)] : losePhrases[Math.floor(Math.random() * losePhrases.length)];
             
             const attachment = new AttachmentBuilder(buffer, { name: 'result.png' });
-            channel.send({ content: `**${username}** ${phrase}`, files: [attachment] });
+            await channel.send({ content: `**${finalName}** ${phrase}`, files: [attachment] });
         }
         res.json({ success: true });
     } catch(e) {
