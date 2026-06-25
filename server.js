@@ -354,7 +354,7 @@ async function generateResultImage(stats, streak, member) {
             const skinImg = await loadImage(imgPath);
             
             // קבוע ההכפלה שלנו כדי שהסקייל הפנימי יהפוך לגודל יפה בתמונה
-            let baseDisplaySize = 450; 
+            let baseDisplaySize = 675; 
             let drawScale = skin.scale || 1;
             
             // שומרים על יחס גובה-רוחב (אספקט-ריישו)
