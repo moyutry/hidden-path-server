@@ -331,11 +331,11 @@ async function generateResultImage(stats, streak, member) {
         floorPattern = ctx.createPattern(await loadImage(fPath), 'repeat');
     } catch(e) {}
 
-    // --- ציור תלת מימדי (בלוק עם גובה ועומק אמיתי!) ---
+    // --- ציור תלת מימדי ---
     ctx.lineWidth = 4; ctx.strokeStyle = '#000000';
 
-    // 1. חלק עליון של הקיר (הגג של הבלוק האחורי)
-    ctx.fillStyle = biome.wallDark || '#5D4037';
+    // 1. חלק עליון של הקיר (עכשיו עם טקסטורה במקום צבע חלק!)
+    ctx.fillStyle = wallPattern || biome.wallDark || '#5D4037';
     ctx.beginPath(); ctx.moveTo(90, 120); ctx.lineTo(350, 120); ctx.lineTo(380, 150); ctx.lineTo(60, 150); ctx.fill(); ctx.stroke();
 
     // 2. חלק קדמי של הקיר
@@ -350,12 +350,12 @@ async function generateResultImage(stats, streak, member) {
     ctx.fillStyle = biome.floorDark || '#558B2F';
     ctx.beginPath(); ctx.moveTo(0, 420); ctx.lineTo(440, 420); ctx.lineTo(440, 450); ctx.lineTo(0, 450); ctx.fill(); ctx.stroke();
 
-    // ציור השחקן
+    // ציור השחקן (תוקן כדי שלא ייצא פצפון!)
     if (skin && !skin.isDefault && skin.dirs && skin.dirs[3]) {
         try {
             let imgPath = skin.dirs[3].startsWith('http') ? skin.dirs[3] : path.join(__dirname, 'public', skin.dirs[3]);
             const skinImg = await loadImage(imgPath);
-            let drawScale = skin.scale || 1; let size = 90 * drawScale;
+            let size = 95; // גודל קבוע במקום להסתמך על סקייל פנימי של המשחק
             ctx.drawImage(skinImg, 220 - size/2, 340 - size/2, size, size);
         } catch(e) { drawDefaultPlayer(); }
     } else { drawDefaultPlayer(); }
@@ -377,28 +377,47 @@ async function generateResultImage(stats, streak, member) {
         ctx.lineWidth = 4; ctx.strokeStyle = themeColor || '#FFD54F'; ctx.beginPath(); ctx.arc(70, 70, 45, 0, Math.PI * 2); ctx.stroke();
     } catch(e) {}
     
-    ctx.fillStyle = themeColor || '#FFD54F'; ctx.lineWidth = 3; ctx.strokeStyle = '#000000';
-    ctx.font = 'bold 50px "Segoe UI", "Helvetica Neue", sans-serif'; 
+    ctx.fillStyle = themeColor || '#FFD54F'; ctx.lineWidth = 2; // הורדנו את עובי המסגרת
+    ctx.strokeStyle = '#000000';
+    ctx.font = 'bold 50px "Segoe UI", sans-serif'; 
     ctx.fillText(finalName, 140, 85); ctx.strokeText(finalName, 140, 85);
 
-    // אייקון אש של הסטרייק (בצד ימין למעלה)
+    // אייקון אש חיה לסטרייק (טוען תמונה אונליין כדי שלא יישבר)
+    try {
+        const fireImg = await loadImage('https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f525.png');
+        ctx.drawImage(fireImg, 730, 45, 45, 45); // מצייר אש אמיתית
+    } catch(e) {}
     ctx.font = 'bold 45px "Segoe UI", sans-serif';
-    const streakTxt = `🔥 ${streak}`;
-    ctx.fillText(streakTxt, 750, 85); ctx.strokeText(streakTxt, 750, 85);
+    ctx.fillText(streak.toString(), 785, 85); ctx.strokeText(streak.toString(), 785, 85);
 
-    // נתונים (כולם בצבע ה-Theme, עם צל ומסגרת)
-    ctx.font = 'bold 120px "Segoe UI", sans-serif'; ctx.lineWidth = 5;
-    ctx.fillText(score.toString(), 480, 210); ctx.strokeText(score.toString(), 480, 210);
+    // ניקוד
+    ctx.font = 'bold 130px "Segoe UI", sans-serif'; ctx.lineWidth = 4;
+    ctx.fillText(score.toString(), 480, 220); ctx.strokeText(score.toString(), 480, 220);
 
-    ctx.font = 'bold 45px "Segoe UI", sans-serif'; ctx.lineWidth = 4;
-    let labels = ['Tries Used:', 'Crystals:', 'Moves:'];
-    let values = [triesUsed.toString(), `${crystals}/3`, (moves !== undefined && moves !== null) ? moves.toString() : '0'];
+    // נתונים רק אם השחקן ניצח - אחרת טקסט כישלון
+    if (isWin) {
+        ctx.font = 'bold 45px "Segoe UI", sans-serif'; ctx.lineWidth = 2;
+        let labels = ['Tries Used:', 'Crystals:', 'Moves:'];
+        let values = [triesUsed.toString(), `${crystals}/3`, (moves !== undefined && moves !== null) ? moves.toString() : '0'];
 
-    for(let i=0; i<3; i++) {
-        let yPos = 320 + i * 70;
-        ctx.fillText(labels[i], 480, yPos); ctx.strokeText(labels[i], 480, yPos);
-        ctx.fillText(values[i], 780, yPos); ctx.strokeText(values[i], 780, yPos);
+        for(let i=0; i<3; i++) {
+            let yPos = 320 + i * 70;
+            ctx.fillText(labels[i], 480, yPos); ctx.strokeText(labels[i], 480, yPos);
+            ctx.fillText(values[i], 780, yPos); ctx.strokeText(values[i], 780, yPos);
+        }
+    } else {
+        // אם השחקן הפסיד (GAME OVER)
+        ctx.fillStyle = '#FF5252';
+        ctx.font = 'bold 60px "Segoe UI", sans-serif'; ctx.lineWidth = 2;
+        ctx.fillText("FAILED THIS LEVEL", 480, 360);
+        ctx.strokeText("FAILED THIS LEVEL", 480, 360);
+        
+        ctx.fillStyle = '#AAAAAA';
+        ctx.font = 'bold 35px "Segoe UI", sans-serif';
+        ctx.fillText("Try again tomorrow!", 480, 420);
+        ctx.strokeText("Try again tomorrow!", 480, 420);
     }
+
     return canvas.toBuffer('image/png');
 }
 
