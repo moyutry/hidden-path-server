@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const dotenv = require('dotenv');
-const { Client, GatewayIntentBits, AttachmentBuilder, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, AttachmentBuilder, Routes, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const mongoose = require('mongoose'); // הספרייה שמדברת עם מסד הנתונים
 const { createCanvas, loadImage } = require('canvas');
 dotenv.config();
@@ -38,16 +38,19 @@ mongoose.connect(process.env.MONGO_URI)
 // יצירת "תבנית השחקן" (מה נשמר לכל שחקן בדאטא-בייס)
 const userSchema = new mongoose.Schema({
     discordId: { type: String, required: true, unique: true },
-    coins: { type: Number, default: 0 }, // מתחיל מ-0 מטבעות במציאות!
-    triesLeft: { type: Number, default: 5 }, // <-- הוספנו!
-    lastPlayedDay: { type: Number, default: -1 }, // <-- הוספנו!
+    coins: { type: Number, default: 0 }, 
+    triesLeft: { type: Number, default: 5 }, 
+    lastPlayedDay: { type: Number, default: -1 }, 
+    streak: { type: Number, default: 0 }, // סטרייק יומי!
+    lastSolvedLevel: { type: Number, default: -1 },
     unlockedSkins: { type: [String], default: ['default'] },
     currentSkin: { type: String, default: 'default' },
     unlockedPacks: { type: [String], default: ['default'] },
     currentPack: { type: String, default: 'default' },
     unlockedBGs: { type: [String], default: ['default'] },
     currentBG: { type: String, default: 'default' },
-    lastSolvedLevel: { type: Number, default: -1 }
+    // כאן השרת שומר את תוצאות היום כדי שנוכל לשתף אותן שוב עם /share
+    todayStats: { type: mongoose.Schema.Types.Mixed, default: null } 
 });
 const User = mongoose.model('User', userSchema);
 
@@ -60,30 +63,61 @@ const client = new Client({
 
 client.once('ready', async () => {
     console.log(`🤖 Discord Bot is ONLINE as ${client.user.tag}!`);
-    // רושם את פקודת ה-Slash לדיסקורד
     try {
-        await client.application.commands.create({
-            name: 'pathway',
-            description: 'Start playing The Hidden Path!'
-        });
+        await client.application.commands.create({ name: 'pathway', description: 'Start playing The Hidden Path!' });
+        await client.application.commands.create({ name: 'share', description: 'Share your daily Hidden Path result!' });
     } catch (e) { console.error("Could not register command:", e); }
 });
 
 client.on('interactionCreate', async interaction => {
+    // טיפול בלחיצה על כפתור ה-Play Now!
+    if (interaction.isButton() && interaction.customId === 'launch_game') {
+        try {
+            await client.rest.post(Routes.interactionCallback(interaction.id, interaction.token), { body: { type: 12 } });
+        } catch (e) { console.error("Button Launch Error", e); }
+        return;
+    }
+
     if (!interaction.isChatInputCommand()) return;
+
     if (interaction.commandName === 'pathway') {
         try {
-            // קוד סודי (12) שגורם לדיסקורד לפתוח את המשחק (Activity) מיד!
-            await client.rest.post(Routes.interactionCallback(interaction.id, interaction.token), {
-                body: { type: 12 } 
-            });
+            await client.rest.post(Routes.interactionCallback(interaction.id, interaction.token), { body: { type: 12 } });
         } catch (e) {
-            console.error("Activity Launch Error:", e);
-            await interaction.reply({ 
-                content: '🚀 **Ready to play?** Click the Rocket Icon below the chat to start **The Hidden Path**!', 
-                ephemeral: true 
+            await interaction.reply({ content: '🚀 **Ready to play?** Click the Rocket Icon below the chat!', ephemeral: true });
+        }
+    }
+
+    if (interaction.commandName === 'share') {
+        let player = await User.findOne({ discordId: interaction.user.id });
+        const todayLevel = getTodayShopAndLevel().levelNumber;
+        
+        const playNowRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('launch_game').setLabel('▶️ Play Now').setStyle(ButtonStyle.Success)
+        );
+
+        if (!player || !player.todayStats || player.lastPlayedDay !== todayLevel) {
+            return interaction.reply({
+                content: 'You haven\'t finished today\'s level yet! Play the game first to share your stats.',
+                ephemeral: true,
+                components: [playNowRow]
             });
         }
+
+        await interaction.deferReply();
+        const member = interaction.member;
+        const buffer = await generateResultImage(player.todayStats, player.streak, member);
+        const attachment = new AttachmentBuilder(buffer, { name: 'result.png' });
+
+        const winPhrases = ["cooked this! 🔥", "destroyed the level! 🚀", "is a pure genius! 🧠", "crushed it! 🏆"];
+        const losePhrases = ["got lost in the path... 💀", "needs to try again tomorrow. 🔄", "was defeated by the map. 📉"];
+        const phrase = player.todayStats.isWin ? winPhrases[Math.floor(Math.random() * winPhrases.length)] : losePhrases[Math.floor(Math.random() * losePhrases.length)];
+
+        await interaction.editReply({
+            content: `**${member ? member.displayName : "Player"}** ${phrase}`,
+            files: [attachment],
+            components: [playNowRow] // מוסיף את כפתור הפליי מתחת לתמונה!
+        });
     }
 });
 
@@ -256,6 +290,118 @@ function getTodayShopAndLevel() {
     };
     lastDay = dayIndex; return dailyCache;
 }
+
+async function generateResultImage(stats, streak, member) {
+    const { isWin, score, triesUsed, crystals, moves, biome, themeColor, skin, bgTheme, pack } = stats;
+    
+    const finalName = member ? member.displayName : "Player";
+    const finalAvatarUrl = member ? member.displayAvatarURL({ extension: 'png', size: 128 }) : "https://cdn.discordapp.com/embed/avatars/0.png";
+
+    const canvas = createCanvas(900, 500);
+    const ctx = canvas.getContext('2d');
+    
+    // רקע
+    if (bgTheme && bgTheme.image) {
+        try {
+            let bgPath = bgTheme.image.startsWith('http') ? bgTheme.image : path.join(__dirname, 'public', bgTheme.image);
+            const bgImg = await loadImage(bgPath);
+            ctx.drawImage(bgImg, 0, 0, 900, 500);
+        } catch(e) { drawGradient(); }
+    } else { drawGradient(); }
+
+    function drawGradient() {
+        const gradient = ctx.createLinearGradient(0, 0, 900, 500);
+        if (bgTheme) {
+            gradient.addColorStop(0, '#' + (bgTheme.uiDark||12720219).toString(16).padStart(6, '0'));
+            gradient.addColorStop(1, '#' + (bgTheme.uiMain||16301008).toString(16).padStart(6, '0'));
+        } else { gradient.addColorStop(0, '#2E3136'); gradient.addColorStop(1, '#1E1E24'); }
+        ctx.fillStyle = gradient; ctx.fillRect(0, 0, 900, 500);
+    }
+
+    // טעינת טקסטורות
+    let wallPattern = null, floorPattern = null;
+    let wPath = path.join(__dirname, 'public', 'assets', 'images', 'wall.png');
+    let fPath = path.join(__dirname, 'public', 'assets', 'images', 'floor.png');
+    if (pack && pack.textures) {
+        if (pack.textures.wall) wPath = pack.textures.wall.startsWith('http') ? pack.textures.wall : path.join(__dirname, 'public', pack.textures.wall);
+        if (pack.textures.floor) fPath = pack.textures.floor.startsWith('http') ? pack.textures.floor : path.join(__dirname, 'public', pack.textures.floor);
+    }
+    try {
+        wallPattern = ctx.createPattern(await loadImage(wPath), 'repeat');
+        floorPattern = ctx.createPattern(await loadImage(fPath), 'repeat');
+    } catch(e) {}
+
+    // --- ציור תלת מימדי (בלוק עם גובה ועומק אמיתי!) ---
+    ctx.lineWidth = 4; ctx.strokeStyle = '#000000';
+
+    // 1. חלק עליון של הקיר (הגג של הבלוק האחורי)
+    ctx.fillStyle = biome.wallDark || '#5D4037';
+    ctx.beginPath(); ctx.moveTo(90, 120); ctx.lineTo(350, 120); ctx.lineTo(380, 150); ctx.lineTo(60, 150); ctx.fill(); ctx.stroke();
+
+    // 2. חלק קדמי של הקיר
+    ctx.fillStyle = wallPattern || biome.wall || '#795548';
+    ctx.beginPath(); ctx.moveTo(60, 150); ctx.lineTo(380, 150); ctx.lineTo(380, 310); ctx.lineTo(60, 310); ctx.fill(); ctx.stroke();
+
+    // 3. חלק עליון של הרצפה 
+    ctx.fillStyle = floorPattern || biome.floor || '#8BC34A';
+    ctx.beginPath(); ctx.moveTo(60, 310); ctx.lineTo(380, 310); ctx.lineTo(440, 420); ctx.lineTo(0, 420); ctx.fill(); ctx.stroke();
+
+    // 4. עובי הרצפה (הצד הקדמי שלה)
+    ctx.fillStyle = biome.floorDark || '#558B2F';
+    ctx.beginPath(); ctx.moveTo(0, 420); ctx.lineTo(440, 420); ctx.lineTo(440, 450); ctx.lineTo(0, 450); ctx.fill(); ctx.stroke();
+
+    // ציור השחקן
+    if (skin && !skin.isDefault && skin.dirs && skin.dirs[3]) {
+        try {
+            let imgPath = skin.dirs[3].startsWith('http') ? skin.dirs[3] : path.join(__dirname, 'public', skin.dirs[3]);
+            const skinImg = await loadImage(imgPath);
+            let drawScale = skin.scale || 1; let size = 90 * drawScale;
+            ctx.drawImage(skinImg, 220 - size/2, 340 - size/2, size, size);
+        } catch(e) { drawDefaultPlayer(); }
+    } else { drawDefaultPlayer(); }
+
+    function drawDefaultPlayer() {
+        ctx.fillStyle = '#FF5252'; ctx.lineWidth = 4; ctx.strokeStyle = '#000000';
+        ctx.beginPath(); ctx.arc(220, 340, 45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.arc(205, 330, 12, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(235, 330, 12, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(205, 330, 5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(235, 330, 5, 0, Math.PI*2); ctx.fill();
+    }
+
+    // --- צללים רכים וטקסט ---
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)'; ctx.shadowBlur = 10; ctx.shadowOffsetX = 3; ctx.shadowOffsetY = 3;
+    
+    // אווטאר וכינוי
+    try {
+        const avatar = await loadImage(finalAvatarUrl);
+        ctx.save(); ctx.beginPath(); ctx.arc(70, 70, 45, 0, Math.PI * 2); ctx.clip(); ctx.drawImage(avatar, 25, 25, 90, 90); ctx.restore();
+        ctx.lineWidth = 4; ctx.strokeStyle = themeColor || '#FFD54F'; ctx.beginPath(); ctx.arc(70, 70, 45, 0, Math.PI * 2); ctx.stroke();
+    } catch(e) {}
+    
+    ctx.fillStyle = themeColor || '#FFD54F'; ctx.lineWidth = 3; ctx.strokeStyle = '#000000';
+    ctx.font = 'bold 50px "Segoe UI", "Helvetica Neue", sans-serif'; 
+    ctx.fillText(finalName, 140, 85); ctx.strokeText(finalName, 140, 85);
+
+    // אייקון אש של הסטרייק (בצד ימין למעלה)
+    ctx.font = 'bold 45px "Segoe UI", sans-serif';
+    const streakTxt = `🔥 ${streak}`;
+    ctx.fillText(streakTxt, 750, 85); ctx.strokeText(streakTxt, 750, 85);
+
+    // נתונים (כולם בצבע ה-Theme, עם צל ומסגרת)
+    ctx.font = 'bold 120px "Segoe UI", sans-serif'; ctx.lineWidth = 5;
+    ctx.fillText(score.toString(), 480, 210); ctx.strokeText(score.toString(), 480, 210);
+
+    ctx.font = 'bold 45px "Segoe UI", sans-serif'; ctx.lineWidth = 4;
+    let labels = ['Tries Used:', 'Crystals:', 'Moves:'];
+    let values = [triesUsed.toString(), `${crystals}/3`, (moves !== undefined && moves !== null) ? moves.toString() : '0'];
+
+    for(let i=0; i<3; i++) {
+        let yPos = 320 + i * 70;
+        ctx.fillText(labels[i], 480, yPos); ctx.strokeText(labels[i], 480, yPos);
+        ctx.fillText(values[i], 780, yPos); ctx.strokeText(values[i], 780, yPos);
+    }
+    return canvas.toBuffer('image/png');
+}
+
 app.post('/api/init', authenticateUser, async (req, res) => {
     let player = await User.findOne({ discordId: req.discordId });
     if (!player) { player = new User({ discordId: req.discordId }); }
@@ -264,8 +410,15 @@ app.post('/api/init', authenticateUser, async (req, res) => {
     const todayData = getTodayShopAndLevel();
     
     if (player.lastPlayedDay !== todayData.levelNumber) {
+        // מערכת סטרייקים: אם הוא שיחק בדיוק אתמול, הסטרייק עולה. אחרת - מתאפס ל-1.
+        if (player.lastPlayedDay === todayData.levelNumber - 1) {
+            player.streak += 1;
+        } else {
+            player.streak = 1; 
+        }
         player.triesLeft = 5;
         player.lastPlayedDay = todayData.levelNumber;
+        player.todayStats = null; // מאפס את התוצאה של אתמול כדי שאי אפשר יהיה לשתף אותה בטעות
         await player.save();
     }
 
@@ -350,151 +503,41 @@ app.post('/api/buy', authenticateUser, async (req, res) => {
 });
 
 app.post('/api/announce', authenticateUser, async (req, res) => {
-    const { channelId, isWin, score, tries, crystals, moves, biome, themeColor, skin, bgTheme, pack } = req.body;
+    // 1. קודם שומרים הכל למסד הנתונים כדי ש-/share יעבוד
+    let player = await User.findOne({ discordId: req.discordId });
+    player.todayStats = {
+        isWin: req.body.isWin, score: req.body.score, triesUsed: req.body.tries, 
+        crystals: req.body.crystals, moves: req.body.moves, biome: req.body.biome, 
+        themeColor: req.body.themeColor, skin: req.body.skin, bgTheme: req.body.bgTheme, pack: req.body.pack
+    };
+    await player.save();
+
+    const channelId = req.body.channelId;
     if (!channelId) return res.status(400).send("No channel ID");
 
     try {
         const channel = await client.channels.fetch(channelId);
         const guild = channel.guild;
-        
-        // מושך את הנתונים המדויקים של השחקן מתוך השרת הספציפי הזה (Display Name)
         const member = await guild.members.fetch(req.discordId).catch(() => null);
+        
+        // מייצר את התמונה החדשה!
+        const buffer = await generateResultImage(player.todayStats, player.streak, member);
+        const attachment = new AttachmentBuilder(buffer, { name: 'result.png' });
+        
+        // מוסיף את כפתור ה-Play Now להודעה הציבורית גם
+        const playNowRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('launch_game').setLabel('▶️ Play Now').setStyle(ButtonStyle.Success)
+        );
+
+        const winPhrases = ["cooked this! 🔥", "destroyed the level! 🚀", "is a pure genius! 🧠", "crushed it! 🏆"];
+        const losePhrases = ["got lost in the path... 💀", "needs to try again tomorrow. 🔄", "was defeated by the map. 📉"];
+        const phrase = req.body.isWin ? winPhrases[Math.floor(Math.random() * winPhrases.length)] : losePhrases[Math.floor(Math.random() * losePhrases.length)];
+        
         const finalName = member ? member.displayName : "Player";
-        const finalAvatarUrl = member ? member.displayAvatarURL({ extension: 'png', size: 128 }) : "https://cdn.discordapp.com/embed/avatars/0.png";
-
-        const canvas = createCanvas(900, 500);
-        const ctx = canvas.getContext('2d');
+        await channel.send({ content: `**${finalName}** ${phrase}`, files: [attachment], components: [playNowRow] });
         
-        // ציור רקע קנוי או גרדיאנט דיפולטיבי
-        if (bgTheme && bgTheme.image) {
-            try {
-                let bgPath = bgTheme.image.startsWith('http') ? bgTheme.image : path.join(__dirname, 'public', bgTheme.image);
-                const bgImg = await loadImage(bgPath);
-                ctx.drawImage(bgImg, 0, 0, 900, 500);
-            } catch(e) { drawGradient(ctx, bgTheme); }
-        } else {
-            drawGradient(ctx, bgTheme);
-        }
-
-        function drawGradient(ctx, bgTheme) {
-            const gradient = ctx.createLinearGradient(0, 0, 900, 500);
-            if (bgTheme) {
-                gradient.addColorStop(0, '#' + (bgTheme.uiDark||12720219).toString(16).padStart(6, '0'));
-                gradient.addColorStop(1, '#' + (bgTheme.uiMain||16301008).toString(16).padStart(6, '0'));
-            } else {
-                gradient.addColorStop(0, '#2E3136'); gradient.addColorStop(1, '#1E1E24');
-            }
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 900, 500);
-        }
-
-        // אווטאר וכינוי דיסקורד (עם פונט יפה ונקי)
-        try {
-            const avatar = await loadImage(finalAvatarUrl);
-            ctx.save();
-            ctx.beginPath(); ctx.arc(70, 70, 45, 0, Math.PI * 2); ctx.clip();
-            ctx.drawImage(avatar, 25, 25, 90, 90);
-            ctx.restore();
-            ctx.lineWidth = 4; ctx.strokeStyle = themeColor || '#FFD54F';
-            ctx.beginPath(); ctx.arc(70, 70, 45, 0, Math.PI * 2); ctx.stroke();
-        } catch(e) {}
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 50px "Segoe UI", "Helvetica Neue", sans-serif'; 
-        ctx.fillText(finalName, 140, 85);
-
-        // טעינת הטקסטורות (אם אין בחבילה, הוא יחפש את הדיפולטיביים בשרת!)
-        let wallPattern = null, floorPattern = null;
-        let wPath = path.join(__dirname, 'public', 'assets', 'images', 'wall.png');
-        let fPath = path.join(__dirname, 'public', 'assets', 'images', 'floor.png');
-
-        if (pack && pack.textures) {
-            if (pack.textures.wall) wPath = pack.textures.wall.startsWith('http') ? pack.textures.wall : path.join(__dirname, 'public', pack.textures.wall);
-            if (pack.textures.floor) fPath = pack.textures.floor.startsWith('http') ? pack.textures.floor : path.join(__dirname, 'public', pack.textures.floor);
-        }
-        
-        try {
-            wallPattern = ctx.createPattern(await loadImage(wPath), 'repeat');
-            floorPattern = ctx.createPattern(await loadImage(fPath), 'repeat');
-        } catch(e) { console.error("Could not load pattern image"); }
-
-        // קיר
-        ctx.fillStyle = wallPattern || biome.wallDark || '#5D4037';
-        ctx.fillRect(50, 180, 350, 200); 
-        ctx.fillStyle = wallPattern || biome.wall || '#795548';
-        ctx.fillRect(50, 180, 330, 180); 
-        ctx.lineWidth = 5; ctx.strokeStyle = '#000000';
-        ctx.strokeRect(50, 180, 350, 200);
-
-        // רצפה
-        ctx.fillStyle = floorPattern || biome.floorDark || '#558B2F';
-        ctx.beginPath(); ctx.moveTo(30, 380); ctx.lineTo(400, 380); ctx.lineTo(450, 500); ctx.lineTo(-20, 500);
-        ctx.fill(); ctx.stroke();
-
-        ctx.fillStyle = floorPattern || biome.floor || '#8BC34A';
-        ctx.beginPath(); ctx.moveTo(50, 380); ctx.lineTo(380, 380); ctx.lineTo(420, 480); ctx.lineTo(10, 480);
-        ctx.fill();
-
-        // ציור השחקן
-        if (skin && !skin.isDefault && skin.dirs && skin.dirs[3]) {
-            try {
-                let imgPath = skin.dirs[3].startsWith('http') ? skin.dirs[3] : path.join(__dirname, 'public', skin.dirs[3]);
-                const skinImg = await loadImage(imgPath);
-                let drawScale = skin.scale || 1;
-                let size = 90 * drawScale;
-                ctx.drawImage(skinImg, 220 - size/2, 370 - size/2, size, size);
-            } catch(e) { drawDefaultPlayer(ctx); }
-        } else {
-            drawDefaultPlayer(ctx);
-        }
-
-        function drawDefaultPlayer(ctx) {
-            ctx.fillStyle = '#FF5252';
-            ctx.beginPath(); ctx.arc(220, 370, 45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-            ctx.fillStyle = '#FFF';
-            ctx.beginPath(); ctx.arc(205, 360, 12, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(235, 360, 12, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = '#000';
-            ctx.beginPath(); ctx.arc(205, 360, 5, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(235, 360, 5, 0, Math.PI*2); ctx.fill();
-        }
-
-        // נתוני הטקסט - ללא אימוג'י בכלל! נקי ומודרני
-        ctx.fillStyle = themeColor || '#FFD54F';
-        ctx.font = 'bold 120px "Segoe UI", "Helvetica Neue", sans-serif';
-        ctx.fillText(score.toString(), 480, 210);
-        ctx.lineWidth = 3; ctx.strokeStyle = '#000000'; ctx.strokeText(score.toString(), 480, 210);
-
-        ctx.font = 'bold 38px "Segoe UI", "Helvetica Neue", sans-serif';
-        
-        // צבע אפור עדין לכותרות
-        ctx.fillStyle = '#CCCCCC'; 
-        ctx.fillText('Tries Used:', 480, 310);
-        ctx.fillText('Crystals:', 480, 380);
-        ctx.fillText('Moves:', 480, 450);
-
-        // צבע לבן למספרים
-        ctx.fillStyle = '#FFFFFF'; 
-        ctx.fillText(tries.toString(), 720, 310);
-        ctx.fillText(`${crystals}/3`, 720, 380);
-        
-        let displayMoves = (moves !== undefined && moves !== null) ? moves.toString() : '0';
-        ctx.fillText(displayMoves, 720, 450);
-
-        const buffer = canvas.toBuffer('image/png');
-        if (channel) {
-            const winPhrases = ["cooked this! 🔥", "destroyed the level! 🚀", "is a pure genius! 🧠", "crushed it! 🏆"];
-            const losePhrases = ["got lost in the path... 💀", "needs to try again tomorrow. 🔄", "was defeated by the map. 📉"];
-            const phrase = isWin ? winPhrases[Math.floor(Math.random() * winPhrases.length)] : losePhrases[Math.floor(Math.random() * losePhrases.length)];
-            
-            const attachment = new AttachmentBuilder(buffer, { name: 'result.png' });
-            await channel.send({ content: `**${finalName}** ${phrase}`, files: [attachment] });
-        }
         res.json({ success: true });
-    } catch(e) {
-        console.error("Canvas error:", e);
-        res.status(500).json({ error: e.message });
-    }
+    } catch(e) { console.error("Canvas/Discord error:", e); res.status(500).json({ error: e.message }); }
 });
 
 // ==========================================
