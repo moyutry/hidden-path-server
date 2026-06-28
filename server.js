@@ -371,11 +371,11 @@ async function generateResultImage(stats, streak, member) {
         try {
             let imgPath = skin.dirs[0].startsWith('http') ? skin.dirs[0] : path.join(__dirname, 'public', skin.dirs[0]);
             const skinImg = await loadImage(imgPath);
-            let baseDisplaySize = 650; // הוגדל מ-450 ל-530
+            let baseDisplaySize = 750; // הוגדל מ-450 ל-530
             let drawScale = skin.scale || 1;
             let finalHeight = baseDisplaySize * drawScale;
             let finalWidth = finalHeight * (skinImg.width / skinImg.height);
-            ctx.drawImage(skinImg, 220 - finalWidth/2, 450 - finalHeight/2, finalWidth, finalHeight);
+            ctx.drawImage(skinImg, 220 - finalWidth/2, 250 - finalHeight/2, finalWidth, finalHeight);
         } catch(e) { drawDefaultPlayer(); }
     } else { drawDefaultPlayer(); }
 
