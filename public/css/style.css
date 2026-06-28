@@ -5,18 +5,34 @@
 }
 
 body {
-    background-color: #0f0f15; /* צבע רקע כהה שמתאים לדיסקורד */
+    background-color: #0f0f15;
     height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
-    overflow: hidden; /* מונע גלילה למטה/למעלה */
+    overflow: hidden;
+    position: relative; /* חובה בשביל הרקע */
+}
+
+#bg-blur {
+    position: absolute;
+    top: -5%; 
+    left: -5%; 
+    width: 110%; 
+    height: 110%; /* קצת יותר גדול כדי למנוע שוליים לבנים בטשטוש */
+    background-size: cover;
+    background-position: center;
+    filter: blur(25px) brightness(0.3); /* טשטוש עמוק והחשכה */
+    z-index: -1;
+    transition: background-image 0.5s ease; /* מעבר חלק כשהרקע מתחלף */
 }
 
 #game-container {
     width: 100%;
     height: 100%;
+    max-width: 100vh; /* מונע מהמשחק להימתח לרוחב במחשב, שומר על יחס Portrait */
     display: flex;
     justify-content: center;
     align-items: center;
+    box-shadow: 0 0 50px rgba(0,0,0,0.8); /* נותן עומק לקנבס מעל הרקע המטושטש */
 }

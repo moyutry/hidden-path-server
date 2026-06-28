@@ -139,6 +139,10 @@ class LobbyScene extends Phaser.Scene {
     }
     
     create() {
+        const activeBg = window.OwnedAssets.bgs.find(b => b.id === window.PlayerData.currentBG);
+        if (activeBg && activeBg.image) {
+            document.getElementById('bg-blur').style.backgroundImage = `url('${activeBg.image}')`;
+        }
         this.cameras.main.scrollX = this.slideDir === 'right' ? -this.scale.width : this.scale.width;
         this.tweens.add({ targets: this.cameras.main, scrollX: 0, duration: 350, ease: 'Cubic.easeOut' });
 
@@ -208,6 +212,10 @@ class ShopScene extends Phaser.Scene {
     init(data) { this.slideDir = data.direction || 'right'; }
 
     create() {
+        const activeBg = window.OwnedAssets.bgs.find(b => b.id === window.PlayerData.currentBG);
+        if (activeBg && activeBg.image) {
+            document.getElementById('bg-blur').style.backgroundImage = `url('${activeBg.image}')`;
+        }
         this.cameras.main.scrollX = this.slideDir === 'right' ? -this.scale.width : this.scale.width;
         this.tweens.add({ targets: this.cameras.main, scrollX: 0, duration: 350, ease: 'Cubic.easeOut' });
 
@@ -377,6 +385,26 @@ class ShopScene extends Phaser.Scene {
                     window.PlayerData.unlockedBGs = data.player.unlockedBGs;
                     window.OwnedAssets = data.ownedAssets; // מרענן את רשימת הנכסים שלי מהשרת!
                     
+                    // --- טעינה דינמית של התמונות לזיכרון ---
+                    let itemObj = item;
+                    if (itemObj.type === 'bg' && !this.textures.exists(itemObj.id)) {
+                        let bgAsset = data.ownedAssets.bgs.find(b => b.id === itemObj.id);
+                        if (bgAsset && bgAsset.image) this.load.image(bgAsset.id, bgAsset.image);
+                    }
+                    if (itemObj.type === 'skin' && !this.textures.exists(`${itemObj.id}_0`)) {
+                        let skinAsset = data.ownedAssets.skins.find(s => s.id === itemObj.id);
+                        if (skinAsset && skinAsset.dirs) skinAsset.dirs.forEach((dirImg, index) => { this.load.image(`${skinAsset.id}_${index}`, dirImg); });
+                    }
+                    if (itemObj.type === 'pack' && !this.textures.exists(`custom_floor_${itemObj.id}`)) {
+                        let packAsset = data.ownedAssets.packs.find(p => p.id === itemObj.id);
+                        if (packAsset && packAsset.textures) {
+                            if (packAsset.textures.floor) this.load.image(`custom_floor_${packAsset.id}`, packAsset.textures.floor);
+                            if (packAsset.textures.wall) this.load.image(`custom_wall_${packAsset.id}`, packAsset.textures.wall);
+                        }
+                    }
+                    // מתחיל את ההורדה מאחורי הקלעים
+                    this.load.start();
+
                     let savedY = this.scrollContainer.y;
                     this.buildShopGrid();
                     this.scrollContainer.y = savedY;
@@ -402,17 +430,66 @@ class ShopScene extends Phaser.Scene {
     }
 
     setupScrolling() {
-        let isDragging = false; let startY = 0; let startScrollY = 0;
+        let isDragging = false; 
+        let startY = 0; 
+        let startScrollY = 0;
+        let velocityY = 0; // המהירות שבה גררנו
+        let lastY = 0;
+
+        // אזור הלחיצה שמשתנה בין החנות ללוקר
+        let minDragY = this.scene.key === 'ShopScene' ? 220 : 300;
+
         this.input.on('pointerdown', (pointer) => {
-            if (pointer.y > 220 && !this.popupGroup.active) { isDragging = true; startY = pointer.y; startScrollY = this.scrollContainer.y; }
+            if (pointer.y > minDragY && (!this.popupGroup || !this.popupGroup.active)) { 
+                isDragging = true; 
+                startY = pointer.y; 
+                lastY = pointer.y;
+                startScrollY = this.scrollContainer.y; 
+                this.tweens.killTweensOf(this.scrollContainer); // עוצר כל החלקה קודמת
+                velocityY = 0;
+            }
         });
+
         this.input.on('pointermove', (pointer) => {
             if (isDragging) {
                 let deltaY = pointer.y - startY;
-                this.scrollContainer.y = Phaser.Math.Clamp(startScrollY + deltaY, -this.maxScroll, 0);
+                this.scrollContainer.y = Phaser.Math.Clamp(startScrollY + deltaY, -(this.maxScroll || 0), 0);
+                velocityY = pointer.y - lastY; // מחשב את מהירות האצבע/עכבר הנוכחית
+                lastY = pointer.y;
             }
         });
-        this.input.on('pointerup', () => isDragging = false);
+
+        this.input.on('pointerup', () => {
+            if (isDragging) {
+                isDragging = false;
+                // אם עזבנו את המסך כשהייתה מהירות גדולה מ-2, "נזרוק" את התפריט
+                if (Math.abs(velocityY) > 2) {
+                    let targetY = Phaser.Math.Clamp(this.scrollContainer.y + (velocityY * 12), -(this.maxScroll || 0), 0);
+                    this.tweens.add({
+                        targets: this.scrollContainer,
+                        y: targetY,
+                        duration: 600,
+                        ease: 'Cubic.easeOut' // האטה חלקה בסוף
+                    });
+                }
+            }
+        });
+
+        // תמיכה בגלגלת עכבר למחשב
+        this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
+            if (pointer.y > minDragY && (!this.popupGroup || !this.popupGroup.active)) {
+                this.tweens.killTweensOf(this.scrollContainer);
+                let targetY = Phaser.Math.Clamp(this.scrollContainer.y - (deltaY * 1.5), -(this.maxScroll || 0), 0);
+                
+                // גלילה חלקה של העכבר
+                this.tweens.add({
+                    targets: this.scrollContainer,
+                    y: targetY,
+                    duration: 150,
+                    ease: 'Quad.easeOut'
+                });
+            }
+        });
     }
 
     createTopUI(titleText) {
@@ -433,6 +510,10 @@ class LockerScene extends Phaser.Scene {
     init(data) { this.slideDir = data.direction || 'right'; }
 
     create() {
+        const activeBg = window.OwnedAssets.bgs.find(b => b.id === window.PlayerData.currentBG);
+        if (activeBg && activeBg.image) {
+            document.getElementById('bg-blur').style.backgroundImage = `url('${activeBg.image}')`;
+        }
         this.cameras.main.scrollX = this.slideDir === 'right' ? -this.scale.width : this.scale.width;
         this.tweens.add({ targets: this.cameras.main, scrollX: 0, duration: 350, ease: 'Cubic.easeOut' });
 
@@ -471,16 +552,66 @@ class LockerScene extends Phaser.Scene {
     }
 
     setupScrolling() {
-        let isDragging = false; let startY = 0; let startScrollY = 0;
+        let isDragging = false; 
+        let startY = 0; 
+        let startScrollY = 0;
+        let velocityY = 0; // המהירות שבה גררנו
+        let lastY = 0;
+
+        // אזור הלחיצה שמשתנה בין החנות ללוקר
+        let minDragY = this.scene.key === 'ShopScene' ? 220 : 300;
+
         this.input.on('pointerdown', (pointer) => {
-            if (pointer.y > 300) { isDragging = true; startY = pointer.y; startScrollY = this.scrollContainer.y; }
-        });
-        this.input.on('pointermove', (pointer) => {
-            if (isDragging) {
-                this.scrollContainer.y = Phaser.Math.Clamp(startScrollY + (pointer.y - startY), -this.maxScroll || 0, 0);
+            if (pointer.y > minDragY && (!this.popupGroup || !this.popupGroup.active)) { 
+                isDragging = true; 
+                startY = pointer.y; 
+                lastY = pointer.y;
+                startScrollY = this.scrollContainer.y; 
+                this.tweens.killTweensOf(this.scrollContainer); // עוצר כל החלקה קודמת
+                velocityY = 0;
             }
         });
-        this.input.on('pointerup', () => isDragging = false);
+
+        this.input.on('pointermove', (pointer) => {
+            if (isDragging) {
+                let deltaY = pointer.y - startY;
+                this.scrollContainer.y = Phaser.Math.Clamp(startScrollY + deltaY, -(this.maxScroll || 0), 0);
+                velocityY = pointer.y - lastY; // מחשב את מהירות האצבע/עכבר הנוכחית
+                lastY = pointer.y;
+            }
+        });
+
+        this.input.on('pointerup', () => {
+            if (isDragging) {
+                isDragging = false;
+                // אם עזבנו את המסך כשהייתה מהירות גדולה מ-2, "נזרוק" את התפריט
+                if (Math.abs(velocityY) > 2) {
+                    let targetY = Phaser.Math.Clamp(this.scrollContainer.y + (velocityY * 12), -(this.maxScroll || 0), 0);
+                    this.tweens.add({
+                        targets: this.scrollContainer,
+                        y: targetY,
+                        duration: 600,
+                        ease: 'Cubic.easeOut' // האטה חלקה בסוף
+                    });
+                }
+            }
+        });
+
+        // תמיכה בגלגלת עכבר למחשב
+        this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
+            if (pointer.y > minDragY && (!this.popupGroup || !this.popupGroup.active)) {
+                this.tweens.killTweensOf(this.scrollContainer);
+                let targetY = Phaser.Math.Clamp(this.scrollContainer.y - (deltaY * 1.5), -(this.maxScroll || 0), 0);
+                
+                // גלילה חלקה של העכבר
+                this.tweens.add({
+                    targets: this.scrollContainer,
+                    y: targetY,
+                    duration: 150,
+                    ease: 'Quad.easeOut'
+                });
+            }
+        });
     }
 
     createTabs() {
@@ -555,6 +686,15 @@ class LockerScene extends Phaser.Scene {
                     window.PlayerData.currentPack = data.currentPack;
                     window.PlayerData.currentBG = data.currentBG;
                     
+                    // מעדכן את הרקע המטושטש במסך המחשב מידית!
+                    if (this.currentTab === 'bg') {
+                        let activeBgObj = window.OwnedAssets.bgs.find(b => b.id === data.currentBG);
+                        if (activeBgObj && activeBgObj.image) {
+                            let blurDiv = document.getElementById('bg-blur');
+                            if (blurDiv) blurDiv.style.backgroundImage = `url('${activeBgObj.image}')`;
+                        }
+                    }
+
                     let savedY = this.scrollContainer.y;
                     this.buildLockerGrid();
                     this.scrollContainer.y = savedY;
@@ -598,6 +738,10 @@ class GameScene extends Phaser.Scene {
     }
 
     create() {
+        const activeBg = window.OwnedAssets.bgs.find(b => b.id === window.PlayerData.currentBG);
+        if (activeBg && activeBg.image) {
+            document.getElementById('bg-blur').style.backgroundImage = `url('${activeBg.image}')`;
+        }
         this.cameras.main.scrollX = this.slideDir === 'right' ? -this.scale.width : this.scale.width;
         this.tweens.add({ targets: this.cameras.main, scrollX: 0, duration: 350, ease: 'Cubic.easeOut' });
 
@@ -1354,10 +1498,11 @@ class GameScene extends Phaser.Scene {
             const row = Math.floor(index / this.blocksPerRow); const col = index % this.blocksPerRow;
             const targetX = startX + col * 105; const targetY = boxY + row * 100;
             
-            if (actionObj.type === 'LOOP_START') startIndexes.push(index);
-            if (actionObj.type === 'LOOP_END' && startIndexes.length > 0) {
-                const sIndex = startIndexes.pop();
-                this.drawLoopBracket(startX + (sIndex%this.blocksPerRow)*105, targetX, targetY);
+            if (actionObj.type === 'LOOP_START') {
+                this.drawLoopBracket(targetX, targetY, true); // מצייר [
+            }
+            if (actionObj.type === 'LOOP_END') {
+                this.drawLoopBracket(targetX, targetY, false); // מצייר ]
             }
 
             let blockContainer = existingBlocks[actionObj.id];
@@ -1392,6 +1537,80 @@ class GameScene extends Phaser.Scene {
                         }
                     });
                 }
+                // ==========================================
+                // מערכת ההולוגרמה (חיזוי עתיד בלחיצה ארוכה)
+                // ==========================================
+                blockContainer.on('pointerdown', () => {
+                    if (this.isPlaying) return;
+                    
+                    // 1. מחשבים כמה צעדים קדימה אנחנו נמצאים בתור (מדלגים על לולאות שלא לוקחות זמן)
+                    let steps = 0;
+                    for (let i = 0; i < index; i++) {
+                        if (this.actionQueue[i].type !== 'LOOP_START' && this.actionQueue[i].type !== 'LOOP_END') steps++;
+                    }
+
+                    // 2. מזיזים את הגשר וירטואלית לעתיד (והופכים אותו לשקוף-זוהר)
+                    if (this.bridgeLogic) {
+                        let bPos = this.bridgeLogic.initialPos;
+                        let bDir = this.bridgeLogic.initialDir;
+                        let bTimer = 1;
+                        for(let i = 0; i < steps; i++) {
+                            if (bTimer > 0) bTimer--;
+                            else {
+                                bPos += bDir;
+                                if (bPos >= this.bridgeLogic.max || bPos <= this.bridgeLogic.min) bDir *= -1;
+                                bTimer = 1;
+                            }
+                        }
+                        this.bridgeVisualX = this.bridgeLogic.axis === 'x' ? bPos : this.bridgeLogic.x;
+                        this.bridgeVisualY = this.bridgeLogic.axis === 'y' ? bPos : this.bridgeLogic.y;
+                        this.bridgeObj.gfx.setAlpha(0.5); // חצי שקוף
+                        this.bridgeObj.gfx.setTint(0x00E5FF); // צבע תכלת וירטואלי
+                    }
+
+                    // 3. מדליקים/מכבים מלכודות וירטואלית לעתיד
+                    let trapsFlipped = false;
+                    let tTimer = 1;
+                    for (let i = 0; i < steps; i++) {
+                        if (tTimer > 0) tTimer--;
+                        else { trapsFlipped = !trapsFlipped; tTimer = 1; }
+                    }
+                    this.spikeTraps.forEach(trap => {
+                        trap.active = trapsFlipped ? !trap.initialActive : trap.initialActive;
+                        let key = `${trap.x}_${trap.y}`;
+                        if (this.trapObjects[key]) {
+                            this.trapObjects[key].spikeGfx.setAlpha(0.5);
+                        }
+                    });
+
+                    this.updateBridgeVisuals();
+                    this.updateTrapsVisuals();
+                });
+
+                // פונקציה שמחזירה את הכל למצב אפס (הווה) כשעוזבים את העכבר
+                const resetHologram = () => {
+                    if (this.isPlaying) return;
+                    
+                    if (this.bridgeLogic) {
+                        this.bridgeVisualX = this.bridgeLogic.x; // חוזר למיקום האמיתי
+                        this.bridgeVisualY = this.bridgeLogic.y;
+                        this.bridgeObj.gfx.setAlpha(1);
+                        this.bridgeObj.gfx.clearTint();
+                    }
+                    
+                    this.spikeTraps.forEach(trap => {
+                        trap.active = trap.initialActive;
+                        let key = `${trap.x}_${trap.y}`;
+                        if (this.trapObjects[key]) this.trapObjects[key].spikeGfx.setAlpha(1);
+                    });
+
+                    this.updateBridgeVisuals();
+                    this.updateTrapsVisuals();
+                };
+
+                // מחברים את איפוס ההולוגרמה לעזיבה של העכבר
+                blockContainer.on('pointerup', resetHologram);
+                blockContainer.on('pointerout', resetHologram);
             } else {
                 const bg = blockContainer.list[0]; bg.clear(); bg.fillStyle(bgColor, 1); bg.lineStyle(4, 0x000000, 1);
                 bg.fillRoundedRect(0, 0, 80, 85, 12); bg.strokeRoundedRect(0, 0, 80, 85, 12);
@@ -1406,10 +1625,25 @@ class GameScene extends Phaser.Scene {
         Object.values(existingBlocks).forEach(b => b.destroy());
     }
 
-    drawLoopBracket(x1, x2, baseY) {
-        const bracket = this.add.graphics(); bracket.lineStyle(6, 0x03A9F4, 1); 
-        bracket.beginPath(); bracket.moveTo(x1 + 40, baseY); bracket.lineTo(x1 + 40, baseY - 45); 
-        bracket.lineTo(x2 + 40, baseY - 45); bracket.lineTo(x2 + 40, baseY); bracket.strokePath();
+    drawLoopBracket(blockX, blockY, isStart) {
+        const bracket = this.add.graphics(); 
+        bracket.lineStyle(6, 0x03A9F4, 1); 
+        bracket.beginPath(); 
+        
+        if (isStart) {
+            // מצייר סוגר שמאלי [ לפני הבלוק
+            bracket.moveTo(blockX - 8, blockY + 80); 
+            bracket.lineTo(blockX - 18, blockY + 80); 
+            bracket.lineTo(blockX - 18, blockY - 5); 
+            bracket.lineTo(blockX - 8, blockY - 5); 
+        } else {
+            // מצייר סוגר ימני ] אחרי הבלוק
+            bracket.moveTo(blockX + 88, blockY + 80); 
+            bracket.lineTo(blockX + 98, blockY + 80); 
+            bracket.lineTo(blockX + 98, blockY - 5); 
+            bracket.lineTo(blockX + 88, blockY - 5); 
+        }
+        bracket.strokePath();
         this.loopBracketsContainer.add(bracket);
     }
 
