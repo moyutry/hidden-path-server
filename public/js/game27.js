@@ -51,11 +51,21 @@ class BootScene extends Phaser.Scene {
             window.PlayerData.channelId = discordSdk.channelId;
 
             // משיכת כל הנתונים, החנות והנכסים מהשרת במכה אחת!
+            // משיכת כל הנתונים (מוסיפים את ה-guildId כדי שהשרת יביא את ה-Display Name)
             const initResponse = await fetch('/api/init', { 
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': window.PlayerData.accessToken }, body: JSON.stringify({}) 
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': window.PlayerData.accessToken }, 
+                body: JSON.stringify({ guildId: discordSdk.guildId }) 
             });
             const initData = await initResponse.json();
 
+            // מעדכנים את השם והתמונה לפי השרת שבו אנחנו נמצאים!
+            if (initData.discordProfile) {
+                window.PlayerData.username = initData.discordProfile.displayName;
+                window.PlayerData.avatarUrl = initData.discordProfile.avatarUrl || `https://cdn.discordapp.com/embed/avatars/0.png`;
+            } else {
+                window.PlayerData.username = auth.user.username;
+                window.PlayerData.avatarUrl = auth.user.avatar ? `https://cdn.discordapp.com/avatars/${auth.user.id}/${auth.user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/0.png`;
+            }
             // שומרים את הכל למשחק
             window.DailyData = initData.dailyData;
             window.OwnedAssets = initData.ownedAssets; // רק הפריטים ששייכים לי!
@@ -475,19 +485,13 @@ class ShopScene extends Phaser.Scene {
             }
         });
 
-        // תמיכה בגלגלת עכבר למחשב
+        // תמיכה בגלגלת עכבר למחשב (שמנו מכפיל 6 כדי שיהיה מהיר יותר!)
         this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
             if (pointer.y > minDragY && (!this.popupGroup || !this.popupGroup.active)) {
                 this.tweens.killTweensOf(this.scrollContainer);
-                let targetY = Phaser.Math.Clamp(this.scrollContainer.y - (deltaY * 1.5), -(this.maxScroll || 0), 0);
+                let targetY = Phaser.Math.Clamp(this.scrollContainer.y - (deltaY * 6), -(this.maxScroll || 0), 0);
                 
-                // גלילה חלקה של העכבר
-                this.tweens.add({
-                    targets: this.scrollContainer,
-                    y: targetY,
-                    duration: 150,
-                    ease: 'Quad.easeOut'
-                });
+                this.tweens.add({ targets: this.scrollContainer, y: targetY, duration: 150, ease: 'Quad.easeOut' });
             }
         });
     }
@@ -597,19 +601,13 @@ class LockerScene extends Phaser.Scene {
             }
         });
 
-        // תמיכה בגלגלת עכבר למחשב
+        // תמיכה בגלגלת עכבר למחשב (שמנו מכפיל 6 כדי שיהיה מהיר יותר!)
         this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
             if (pointer.y > minDragY && (!this.popupGroup || !this.popupGroup.active)) {
                 this.tweens.killTweensOf(this.scrollContainer);
-                let targetY = Phaser.Math.Clamp(this.scrollContainer.y - (deltaY * 1.5), -(this.maxScroll || 0), 0);
+                let targetY = Phaser.Math.Clamp(this.scrollContainer.y - (deltaY * 6), -(this.maxScroll || 0), 0);
                 
-                // גלילה חלקה של העכבר
-                this.tweens.add({
-                    targets: this.scrollContainer,
-                    y: targetY,
-                    duration: 150,
-                    ease: 'Quad.easeOut'
-                });
+                this.tweens.add({ targets: this.scrollContainer, y: targetY, duration: 150, ease: 'Quad.easeOut' });
             }
         });
     }
@@ -800,6 +798,8 @@ class GameScene extends Phaser.Scene {
         
         this.input.on('dragstart', (pointer, gameObject) => {
             if (this.isPlaying) return;
+            if (gameObject.previewTimer) gameObject.previewTimer.remove();
+            if (gameObject.isPreviewing) { gameObject.isPreviewing = false; this.resetHologram(); }
             this.children.bringToTop(gameObject);
             gameObject.setAlpha(0.8); gameObject.setScale(1.1);
         });
@@ -1106,6 +1106,46 @@ class GameScene extends Phaser.Scene {
                 this.trapObjects[key].spikeGfx.strokePath();
             }
         });
+    }
+
+    activateHologram(steps) {
+        if (this.isPlaying) return;
+        this.cameras.main.shake(100, 0.005); // רטט קטן שנותן פידבק שנכנסנו לחיזוי
+        
+        if (this.bridgeLogic) {
+            let bPos = this.bridgeLogic.initialPos; let bDir = this.bridgeLogic.initialDir; let bTimer = 1;
+            for(let i = 0; i < steps; i++) {
+                if (bTimer > 0) bTimer--;
+                else { bPos += bDir; if (bPos >= this.bridgeLogic.max || bPos <= this.bridgeLogic.min) bDir *= -1; bTimer = 1; }
+            }
+            this.bridgeVisualX = this.bridgeLogic.axis === 'x' ? bPos : this.bridgeLogic.x;
+            this.bridgeVisualY = this.bridgeLogic.axis === 'y' ? bPos : this.bridgeLogic.y;
+            this.bridgeObj.gfx.setAlpha(0.5); this.bridgeObj.gfx.setTint(0x00E5FF);
+        }
+
+        let trapsFlipped = false; let tTimer = 1;
+        for (let i = 0; i < steps; i++) { if (tTimer > 0) tTimer--; else { trapsFlipped = !trapsFlipped; tTimer = 1; } }
+        this.spikeTraps.forEach(trap => {
+            trap.active = trapsFlipped ? !trap.initialActive : trap.initialActive;
+            let key = `${trap.x}_${trap.y}`;
+            if (this.trapObjects[key]) this.trapObjects[key].spikeGfx.setAlpha(0.5);
+        });
+
+        this.updateBridgeVisuals(); this.updateTrapsVisuals();
+    }
+
+    resetHologram() {
+        if (this.isPlaying) return;
+        if (this.bridgeLogic) {
+            this.bridgeVisualX = this.bridgeLogic.x; this.bridgeVisualY = this.bridgeLogic.y;
+            this.bridgeObj.gfx.setAlpha(1); this.bridgeObj.gfx.clearTint();
+        }
+        this.spikeTraps.forEach(trap => {
+            trap.active = trap.initialActive;
+            let key = `${trap.x}_${trap.y}`;
+            if (this.trapObjects[key]) this.trapObjects[key].spikeGfx.setAlpha(1);
+        });
+        this.updateBridgeVisuals(); this.updateTrapsVisuals();
     }
 
     createCrystals() {
@@ -1492,19 +1532,12 @@ class GameScene extends Phaser.Scene {
         const symbols = { 'FORWARD': '⬆️', 'RIGHT': '↪️', 'LEFT': '↩️', 'UTURN': '🔄', 'WAIT': '⏳', 'LOOP_START': '🔁', 'LOOP_END': '🔚' };
         
         const existingBlocks = {}; this.queueBlocksContainer.each(b => { existingBlocks[b.actionData.id] = b; });
-        this.loopBracketsContainer.removeAll(true); let startIndexes = [];
+        if(this.loopBracketsContainer) this.loopBracketsContainer.removeAll(true); // אין צורך בקו יותר
 
         this.actionQueue.forEach((actionObj, index) => {
             const row = Math.floor(index / this.blocksPerRow); const col = index % this.blocksPerRow;
             const targetX = startX + col * 105; const targetY = boxY + row * 100;
             
-            if (actionObj.type === 'LOOP_START') {
-                this.drawLoopBracket(targetX, targetY, true); // מצייר [
-            }
-            if (actionObj.type === 'LOOP_END') {
-                this.drawLoopBracket(targetX, targetY, false); // מצייר ]
-            }
-
             let blockContainer = existingBlocks[actionObj.id];
             let bgColor = 0xFFFFFF;
             if (this.isPlaying) {
@@ -1521,130 +1554,80 @@ class GameScene extends Phaser.Scene {
             if (!blockContainer) {
                 blockContainer = this.add.container(targetX + 40, targetY + 40);
                 blockContainer.setSize(80, 85); blockContainer.setInteractive(); this.input.setDraggable(blockContainer);
+                
                 const blockBg = this.add.graphics({ x: -40, y: -42 });
-                blockBg.fillStyle(bgColor, 1); blockBg.lineStyle(4, 0x000000, 1);
-                blockBg.fillRoundedRect(0, 0, 80, 85, 12); blockBg.strokeRoundedRect(0, 0, 80, 85, 12);
                 const txt = this.add.text(0, 0, textValue, { fontFamily: this.comicFont, fontSize: '28px', fill: '#000000' }).setOrigin(0.5);
-                blockContainer.add([blockBg, txt]); this.queueBlocksContainer.add(blockContainer);
+                const bracketGfx = this.add.graphics(); // הסוגריים יצוירו כאן וילוו את הבלוק באנימציה!
+                bracketGfx.name = 'bracket';
 
-                if (actionObj.type === 'LOOP_START') {
-                    blockContainer.on('pointerup', (pointer) => {
+                blockContainer.add([blockBg, bracketGfx, txt]); 
+                this.queueBlocksContainer.add(blockContainer);
+
+                // שינוי כמות לולאה + לחיצה ארוכה (הולוגרמה)
+                blockContainer.on('pointerdown', (pointer) => {
+                    if (this.isPlaying) return;
+                    
+                    // מתחיל טיימר ללחיצה ארוכה (חיזוי עתיד)
+                    blockContainer.previewTimer = this.time.delayedCall(300, () => {
+                        let steps = 0;
+                        for (let i = 0; i < index; i++) { if (this.actionQueue[i].type !== 'LOOP_START' && this.actionQueue[i].type !== 'LOOP_END') steps++; }
+                        this.activateHologram(steps);
+                        blockContainer.isPreviewing = true;
+                    });
+                });
+
+                blockContainer.on('pointerup', (pointer) => {
+                    if (blockContainer.previewTimer) blockContainer.previewTimer.remove();
+                    if (blockContainer.isPreviewing) {
+                        blockContainer.isPreviewing = false;
+                        this.resetHologram();
+                    } else if (actionObj.type === 'LOOP_START' && !this.isPlaying) {
                         const isDrag = Phaser.Math.Distance.Between(pointer.downX, pointer.downY, pointer.upX, pointer.upY) > 10;
-                        if (!this.isPlaying && !isDrag && pointer.getDuration() < 300) {
+                        if (!isDrag && pointer.getDuration() < 300) {
                             actionObj.loopCount = actionObj.loopCount >= 4 ? 2 : actionObj.loopCount + 1;
                             txt.setText(`🔁x${actionObj.loopCount}`);
                             this.tweens.add({ targets: blockContainer, scale: 1.2, duration: 100, yoyo: true });
                         }
-                    });
-                }
-                // ==========================================
-                // מערכת ההולוגרמה (חיזוי עתיד בלחיצה ארוכה)
-                // ==========================================
-                blockContainer.on('pointerdown', () => {
-                    if (this.isPlaying) return;
-                    
-                    // 1. מחשבים כמה צעדים קדימה אנחנו נמצאים בתור (מדלגים על לולאות שלא לוקחות זמן)
-                    let steps = 0;
-                    for (let i = 0; i < index; i++) {
-                        if (this.actionQueue[i].type !== 'LOOP_START' && this.actionQueue[i].type !== 'LOOP_END') steps++;
                     }
-
-                    // 2. מזיזים את הגשר וירטואלית לעתיד (והופכים אותו לשקוף-זוהר)
-                    if (this.bridgeLogic) {
-                        let bPos = this.bridgeLogic.initialPos;
-                        let bDir = this.bridgeLogic.initialDir;
-                        let bTimer = 1;
-                        for(let i = 0; i < steps; i++) {
-                            if (bTimer > 0) bTimer--;
-                            else {
-                                bPos += bDir;
-                                if (bPos >= this.bridgeLogic.max || bPos <= this.bridgeLogic.min) bDir *= -1;
-                                bTimer = 1;
-                            }
-                        }
-                        this.bridgeVisualX = this.bridgeLogic.axis === 'x' ? bPos : this.bridgeLogic.x;
-                        this.bridgeVisualY = this.bridgeLogic.axis === 'y' ? bPos : this.bridgeLogic.y;
-                        this.bridgeObj.gfx.setAlpha(0.5); // חצי שקוף
-                        this.bridgeObj.gfx.setTint(0x00E5FF); // צבע תכלת וירטואלי
-                    }
-
-                    // 3. מדליקים/מכבים מלכודות וירטואלית לעתיד
-                    let trapsFlipped = false;
-                    let tTimer = 1;
-                    for (let i = 0; i < steps; i++) {
-                        if (tTimer > 0) tTimer--;
-                        else { trapsFlipped = !trapsFlipped; tTimer = 1; }
-                    }
-                    this.spikeTraps.forEach(trap => {
-                        trap.active = trapsFlipped ? !trap.initialActive : trap.initialActive;
-                        let key = `${trap.x}_${trap.y}`;
-                        if (this.trapObjects[key]) {
-                            this.trapObjects[key].spikeGfx.setAlpha(0.5);
-                        }
-                    });
-
-                    this.updateBridgeVisuals();
-                    this.updateTrapsVisuals();
                 });
 
-                // פונקציה שמחזירה את הכל למצב אפס (הווה) כשעוזבים את העכבר
-                const resetHologram = () => {
-                    if (this.isPlaying) return;
-                    
-                    if (this.bridgeLogic) {
-                        this.bridgeVisualX = this.bridgeLogic.x; // חוזר למיקום האמיתי
-                        this.bridgeVisualY = this.bridgeLogic.y;
-                        this.bridgeObj.gfx.setAlpha(1);
-                        this.bridgeObj.gfx.clearTint();
-                    }
-                    
-                    this.spikeTraps.forEach(trap => {
-                        trap.active = trap.initialActive;
-                        let key = `${trap.x}_${trap.y}`;
-                        if (this.trapObjects[key]) this.trapObjects[key].spikeGfx.setAlpha(1);
-                    });
+                blockContainer.on('pointerout', () => {
+                    if (blockContainer.previewTimer) blockContainer.previewTimer.remove();
+                    if (blockContainer.isPreviewing) { blockContainer.isPreviewing = false; this.resetHologram(); }
+                });
 
-                    this.updateBridgeVisuals();
-                    this.updateTrapsVisuals();
-                };
-
-                // מחברים את איפוס ההולוגרמה לעזיבה של העכבר
-                blockContainer.on('pointerup', resetHologram);
-                blockContainer.on('pointerout', resetHologram);
             } else {
-                const bg = blockContainer.list[0]; bg.clear(); bg.fillStyle(bgColor, 1); bg.lineStyle(4, 0x000000, 1);
-                bg.fillRoundedRect(0, 0, 80, 85, 12); bg.strokeRoundedRect(0, 0, 80, 85, 12);
-                blockContainer.list[1].setText(textValue);
-                if (animateMovement && (blockContainer.x !== targetX + 40 || blockContainer.y !== targetY + 40)) {
-                    this.tweens.add({ targets: blockContainer, x: targetX + 40, y: targetY + 40, duration: 250, ease: 'Quad.easeOut' });
-                } else blockContainer.setPosition(targetX + 40, targetY + 40);
                 delete existingBlocks[actionObj.id];
             }
+
+            // עדכון המראה של הבלוק (גם אם קיים וגם אם חדש)
+            const bg = blockContainer.list[0]; bg.clear(); bg.fillStyle(bgColor, 1); bg.lineStyle(4, 0x000000, 1);
+            bg.fillRoundedRect(0, 0, 80, 85, 12); bg.strokeRoundedRect(0, 0, 80, 85, 12);
+            
+            const bracket = blockContainer.list.find(i => i.name === 'bracket');
+            bracket.clear();
+            if (actionObj.type === 'LOOP_START' || actionObj.type === 'LOOP_END') {
+                bracket.lineStyle(8, 0x03A9F4, 1);
+                bracket.beginPath();
+                if (actionObj.type === 'LOOP_START') {
+                    // סוגריים צד שמאל
+                    bracket.moveTo(-33, 44); bracket.lineTo(-48, 44); bracket.lineTo(-48, -43); bracket.lineTo(-33, -43);
+                } else {
+                    // סוגריים צד ימין
+                    bracket.moveTo(33, 44); bracket.lineTo(48, 44); bracket.lineTo(48, -43); bracket.lineTo(33, -43);
+                }
+                bracket.strokePath();
+            }
+
+            blockContainer.list[2].setText(textValue);
+            
+            if (animateMovement && (blockContainer.x !== targetX + 40 || blockContainer.y !== targetY + 40)) {
+                this.tweens.add({ targets: blockContainer, x: targetX + 40, y: targetY + 40, duration: 250, ease: 'Quad.easeOut' });
+            } else blockContainer.setPosition(targetX + 40, targetY + 40);
+            
             blockContainer.actionData = actionObj;
         });
         Object.values(existingBlocks).forEach(b => b.destroy());
-    }
-
-    drawLoopBracket(blockX, blockY, isStart) {
-        const bracket = this.add.graphics(); 
-        bracket.lineStyle(6, 0x03A9F4, 1); 
-        bracket.beginPath(); 
-        
-        if (isStart) {
-            // מצייר סוגר שמאלי [ לפני הבלוק
-            bracket.moveTo(blockX - 8, blockY + 80); 
-            bracket.lineTo(blockX - 18, blockY + 80); 
-            bracket.lineTo(blockX - 18, blockY - 5); 
-            bracket.lineTo(blockX - 8, blockY - 5); 
-        } else {
-            // מצייר סוגר ימני ] אחרי הבלוק
-            bracket.moveTo(blockX + 88, blockY + 80); 
-            bracket.lineTo(blockX + 98, blockY + 80); 
-            bracket.lineTo(blockX + 98, blockY - 5); 
-            bracket.lineTo(blockX + 88, blockY - 5); 
-        }
-        bracket.strokePath();
-        this.loopBracketsContainer.add(bracket);
     }
 
     handleBlockDrop(droppedBlock) {

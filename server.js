@@ -490,30 +490,41 @@ app.post('/api/init', authenticateUser, async (req, res) => {
     let player = await User.findOne({ discordId: req.discordId });
     if (!player) { player = new User({ discordId: req.discordId }); }
     
+    // מושך את פרטי השחקן מתוך השרת עצמו!
+    const { guildId } = req.body;
+    let discordProfile = null;
+    if (guildId) {
+        try {
+            const guild = await client.guilds.fetch(guildId);
+            const member = await guild.members.fetch(req.discordId);
+            if (member) {
+                discordProfile = {
+                    displayName: member.displayName,
+                    avatarUrl: member.displayAvatarURL({ extension: 'png', size: 128 })
+                };
+            }
+        } catch (e) { console.error("Guild member fetch failed", e); }
+    }
+
     const config = getShopConfig();
     const todayData = getTodayShopAndLevel();
     
     if (player.lastPlayedDay !== todayData.levelNumber) {
-        // מערכת סטרייקים: אם הוא שיחק בדיוק אתמול, הסטרייק עולה. אחרת - מתאפס ל-1.
-        if (player.lastPlayedDay === todayData.levelNumber - 1) {
-            player.streak += 1;
-        } else {
-            player.streak = 1; 
-        }
+        if (player.lastPlayedDay === todayData.levelNumber - 1) player.streak += 1;
+        else player.streak = 1; 
         player.triesLeft = 5;
         player.lastPlayedDay = todayData.levelNumber;
-        player.todayStats = null; // מאפס את התוצאה של אתמול כדי שאי אפשר יהיה לשתף אותה בטעות
+        player.todayStats = null; 
         await player.save();
     }
 
-    // השרת מסנן ושולח לשחקן רק את התמונות והמידע של הפריטים שהוא כבר קנה!
     const ownedAssets = {
         skins: config.skins.filter(s => player.unlockedSkins.includes(s.id) || s.isDefault),
         packs: config.packs.filter(p => player.unlockedPacks.includes(p.id) || p.isDefault),
         bgs: config.bgs.filter(b => player.unlockedBGs.includes(b.id) || b.isDefault)
     };
 
-    res.json({ player, dailyData: todayData, ownedAssets });
+    res.json({ player, dailyData: todayData, ownedAssets, discordProfile });
 });
 
 // אבטחת הלוקר: השרת בודק אם באמת יש לך את הפריט!

@@ -7,11 +7,12 @@
 body {
     background-color: #0f0f15;
     height: 100vh;
+    width: 100vw;
     display: flex;
     justify-content: center;
     align-items: center;
     overflow: hidden;
-    position: relative; /* חובה בשביל הרקע */
+    position: relative; 
 }
 
 #bg-blur {
@@ -19,20 +20,20 @@ body {
     top: -5%; 
     left: -5%; 
     width: 110%; 
-    height: 110%; /* קצת יותר גדול כדי למנוע שוליים לבנים בטשטוש */
+    height: 110%; 
     background-size: cover;
     background-position: center;
-    filter: blur(25px) brightness(0.3); /* טשטוש עמוק והחשכה */
+    filter: blur(25px) brightness(0.3); 
     z-index: -1;
-    transition: background-image 0.5s ease; /* מעבר חלק כשהרקע מתחלף */
+    transition: background-image 0.5s ease;
 }
 
 #game-container {
-    width: 100%;
-    height: 100%;
-    max-width: 100vh; /* מונע מהמשחק להימתח לרוחב במחשב, שומר על יחס Portrait */
+    height: 100vh; /* מתאים את עצמו תמיד לגובה המסך */
+    aspect-ratio: 9/16; /* שומר על פרופורציות של טלפון בדיוק */
+    max-width: 100vw;
     display: flex;
     justify-content: center;
     align-items: center;
-    box-shadow: 0 0 50px rgba(0,0,0,0.8); /* נותן עומק לקנבס מעל הרקע המטושטש */
+    box-shadow: 0 0 50px rgba(0,0,0,0.8);
 }
