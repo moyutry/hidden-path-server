@@ -7,12 +7,12 @@
     ],
     "packs": [
         { "id": "default", "name": "Lush Forest", "price": 0, "isDefault": true, "biome": { "floor": "#8BC34A", "floorDark": "#5D4037", "wall": "#795548", "wallDark": "#5D4037", "trap": "#29B6F6", "trapDark": "#0288D1" } },
-        { "id": "pack_desert", "name": "Desert Theme", "price": 2500, "biome": { "floor": "#E0C097", "floorDark": "#C89F70", "wall": "#B87333", "wallDark": "#8A5A2B", "trap": "#FFCC80", "trapDark": "#F57C00" }, "textures": { "floor": "assets/packs/desert_floor.png", "wall": "assets/packs/desert_wall.png" } },
+        { "id": "pack_desert", "name": "Desert Theme", "price": 2500, "biome": { "floor": "#E0C097", "floorDark": "#C89F70", "wall": "#B87333", "wallDark": "#8A5A2B", "trap": "#FFCC80", "trapDark": "#F57C00" }, "textures": { "floor": "assets/packs/desert_sand.png", "wall": "assets/packs/desert_wall.png" } },
         { "id": "pack_neon", "name": "Cyberpunk", "price": 3000, "biome": { "floor": "#000000", "floorDark": "#111", "wall": "#222", "wallDark": "#000", "trap": "#FF00FF", "trapDark": "#880088" } }
     ],
     "bgs": [
         { "id": "default", "name": "Pink Dream", "price": 0, "isDefault": true, "image": "assets/images/bg_game.png", "uiMain": 16301008, "uiDark": 12720219 },
-        { "id": "bg_space", "name": "Galaxy BG", "price": 800, "image": "assets/images/bg_space.png", "uiMain": 1710638, "uiDark": 996448 },
+        { "id": "bg_desert", "name": "Desert BG", "price": 800, "image": "assets/images/bg_desert.png", "uiMain": 1710638, "uiDark": 996448 },
         { "id": "bg_sunset", "name": "Sunset Vibe", "price": 1200, "image": "assets/images/bg_sunset.png", "uiMain": 16758605, "uiDark": 15094016 }
     ]
 }
