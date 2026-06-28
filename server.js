@@ -375,7 +375,7 @@ async function generateResultImage(stats, streak, member) {
             let drawScale = skin.scale || 1;
             let finalHeight = baseDisplaySize * drawScale;
             let finalWidth = finalHeight * (skinImg.width / skinImg.height);
-            ctx.drawImage(skinImg, 220 - finalWidth/2, 250 - finalHeight/2, finalWidth, finalHeight);
+            ctx.drawImage(skinImg, 220 - finalWidth/2, 300 - finalHeight/2, finalWidth, finalHeight);
         } catch(e) { drawDefaultPlayer(); }
     } else { drawDefaultPlayer(); }
 

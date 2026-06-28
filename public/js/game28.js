@@ -733,6 +733,7 @@ class GameScene extends Phaser.Scene {
         this.bridgeVisualX = undefined;
         this.bridgeVisualY = undefined;
         this.gridInitialized = false;
+        this.isEnding = false;
     }
 
     create() {
@@ -1110,7 +1111,7 @@ class GameScene extends Phaser.Scene {
 
     activateHologram(steps) {
         if (this.isPlaying) return;
-        this.cameras.main.shake(100, 0.005); // רטט קטן שנותן פידבק שנכנסנו לחיזוי
+        this.cameras.main.shake(100, 0.005);
         
         if (this.bridgeLogic) {
             let bPos = this.bridgeLogic.initialPos; let bDir = this.bridgeLogic.initialDir; let bTimer = 1;
@@ -1120,7 +1121,9 @@ class GameScene extends Phaser.Scene {
             }
             this.bridgeVisualX = this.bridgeLogic.axis === 'x' ? bPos : this.bridgeLogic.x;
             this.bridgeVisualY = this.bridgeLogic.axis === 'y' ? bPos : this.bridgeLogic.y;
-            this.bridgeObj.gfx.setAlpha(0.5); this.bridgeObj.gfx.setTint(0x00E5FF);
+            
+            this.bridgeObj.gfx.setAlpha(0.5); 
+            if (this.bridgeObj.img) this.bridgeObj.img.setTint(0x00E5FF); // התיקון: צובעים רק את התמונה!
         }
 
         let trapsFlipped = false; let tTimer = 1;
@@ -1138,7 +1141,9 @@ class GameScene extends Phaser.Scene {
         if (this.isPlaying) return;
         if (this.bridgeLogic) {
             this.bridgeVisualX = this.bridgeLogic.x; this.bridgeVisualY = this.bridgeLogic.y;
-            this.bridgeObj.gfx.setAlpha(1); this.bridgeObj.gfx.clearTint();
+            
+            this.bridgeObj.gfx.setAlpha(1); 
+            if (this.bridgeObj.img) this.bridgeObj.img.clearTint(); // התיקון: מנקים רק מהתמונה!
         }
         this.spikeTraps.forEach(trap => {
             trap.active = trap.initialActive;
@@ -1690,7 +1695,9 @@ class GameScene extends Phaser.Scene {
     }
 
     showGameOverScreen() {
-        this.isPlaying = true; 
+        if (this.isEnding) return; 
+        this.isEnding = true;
+        this.isPlaying = true;
         fetch('/api/announce', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': window.PlayerData.accessToken },
@@ -1724,6 +1731,8 @@ class GameScene extends Phaser.Scene {
     }
 
     showWinScreen() {
+        if (this.isEnding) return; 
+        this.isEnding = true;
         this.isPlaying = true; 
         
         let actionCost = 0; 
