@@ -624,8 +624,45 @@ app.post('/api/announce', authenticateUser, async (req, res) => {
             new ButtonBuilder().setCustomId('launch_game').setLabel('▶️ Play Now').setStyle(ButtonStyle.Success)
         );
 
-        const winPhrases = ["cooked this! 🔥", "destroyed the level! 🚀", "is a pure genius! 🧠", "crushed it! 🏆"];
-        const losePhrases = ["got lost in the path... 💀", "needs to try again tomorrow. 🔄", "was defeated by the map. 📉"];
+        const winPhrases = [
+        // --- BASELINE HIGH ENERGY ---
+        "cooked this! 🔥", 
+        "destroyed the level! 🚀", 
+        "crushed it! 🏆",
+        "left no crumbs. 🍽️",
+        "just dropped a masterclass. 🎓",
+        "is absolutely cracked! 🕹️",
+        "walked through that like a boss. 👑",
+
+        // --- INTEGRATED MARVEL WINS ---
+        "is a genius, billionaire, playboy, philanthropist. 💳",
+        "looked at 14,000,605 futures and found the one where they win. ⏳", 
+        "can do this all day. 🛡️", 
+        "declared: 'Earth is closed today!' 🌍", 
+        "is burdened with glorious purpose. 👑", 
+        "successfully privatized world peace. 🕶️",
+        "is officially inevitable. 💎",
+        "is doing whatever it takes. 🏹",
+        ];
+
+        const losePhrases = [
+        // --- BASELINE LOSSES ---
+        "got lost in the path... 💀", 
+        "needs to try again tomorrow. 🔄", 
+        "was defeated by the map. 📉",
+        "got absolutely cooked. 🍳",
+        "left the lobby in tears. 😭",
+
+        // --- INTEGRATED MARVEL LOSSES ---
+        "found out that reality is often disappointing. 🔮", 
+        "faded away into dust... 💨", 
+        "should have gone for the head. 🪓", 
+        "realized part of the journey is the end. ⏳", 
+        "got embarrassed in front of the wizards. 🧙‍♂️",
+        "is officially cursed with knowledge but zero skill. 🧠",
+        "aimed for the chest and paid the price. 💔",
+        "got caught playing Galaga, thought they wouldn't notice, but they did. 👾",
+        ];
         const phrase = req.body.isWin ? winPhrases[Math.floor(Math.random() * winPhrases.length)] : losePhrases[Math.floor(Math.random() * losePhrases.length)];
         
         const finalName = member ? member.displayName : "Player";
