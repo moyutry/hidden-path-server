@@ -291,144 +291,6 @@ function getTodayShopAndLevel() {
     lastDay = dayIndex; return dailyCache;
 }
 
-// async function generateResultImage(stats, streak, member) {
-//     const { isWin, score, triesUsed, crystals, moves, biome, themeColor, skin, bgTheme, pack } = stats;
-    
-//     const finalName = member ? member.displayName : "Player";
-//     const finalAvatarUrl = member ? member.displayAvatarURL({ extension: 'png', size: 128 }) : "https://cdn.discordapp.com/embed/avatars/0.png";
-
-//     const canvas = createCanvas(900, 500);
-//     const ctx = canvas.getContext('2d');
-    
-//     // רקע
-//     if (bgTheme && bgTheme.image) {
-//         try {
-//             let bgPath = bgTheme.image.startsWith('http') ? bgTheme.image : path.join(__dirname, 'public', bgTheme.image);
-//             const bgImg = await loadImage(bgPath);
-//             ctx.drawImage(bgImg, 0, 0, 900, 500);
-//         } catch(e) { drawGradient(); }
-//     } else { drawGradient(); }
-
-//     function drawGradient() {
-//         const gradient = ctx.createLinearGradient(0, 0, 900, 500);
-//         if (bgTheme) {
-//             gradient.addColorStop(0, '#' + (bgTheme.uiDark||12720219).toString(16).padStart(6, '0'));
-//             gradient.addColorStop(1, '#' + (bgTheme.uiMain||16301008).toString(16).padStart(6, '0'));
-//         } else { gradient.addColorStop(0, '#2E3136'); gradient.addColorStop(1, '#1E1E24'); }
-//         ctx.fillStyle = gradient; ctx.fillRect(0, 0, 900, 500);
-//     }
-
-//     // טעינת טקסטורות
-//     let wallPattern = null, floorPattern = null;
-//     let wPath = path.join(__dirname, 'public', 'assets', 'images', 'wall.png');
-//     let fPath = path.join(__dirname, 'public', 'assets', 'images', 'floor.png');
-//     if (pack && pack.textures) {
-//         if (pack.textures.wall) wPath = pack.textures.wall.startsWith('http') ? pack.textures.wall : path.join(__dirname, 'public', pack.textures.wall);
-//         if (pack.textures.floor) fPath = pack.textures.floor.startsWith('http') ? pack.textures.floor : path.join(__dirname, 'public', pack.textures.floor);
-//     }
-//     try {
-//         wallPattern = ctx.createPattern(await loadImage(wPath), 'repeat');
-//         floorPattern = ctx.createPattern(await loadImage(fPath), 'repeat');
-//     } catch(e) {}
-
-//     // ציור תלת מימדי
-//     ctx.lineWidth = 3; ctx.strokeStyle = '#000000';
-
-//     // גג הקיר
-//     ctx.fillStyle = wallPattern || biome.wallDark || '#5D4037';
-//     ctx.beginPath(); ctx.moveTo(90, 120); ctx.lineTo(350, 120); ctx.lineTo(380, 150); ctx.lineTo(60, 150); ctx.fill(); ctx.stroke();
-//     // חזית הקיר
-//     ctx.fillStyle = wallPattern || biome.wall || '#795548';
-//     ctx.beginPath(); ctx.moveTo(60, 150); ctx.lineTo(380, 150); ctx.lineTo(380, 310); ctx.lineTo(60, 310); ctx.fill(); ctx.stroke();
-//     // רצפה
-//     ctx.fillStyle = floorPattern || biome.floor || '#8BC34A';
-//     ctx.beginPath(); ctx.moveTo(60, 310); ctx.lineTo(380, 310); ctx.lineTo(440, 420); ctx.lineTo(0, 420); ctx.fill(); ctx.stroke();
-//     // עובי הרצפה
-//     ctx.fillStyle = biome.floorDark || '#558B2F';
-//     ctx.beginPath(); ctx.moveTo(0, 420); ctx.lineTo(440, 420); ctx.lineTo(440, 450); ctx.lineTo(0, 450); ctx.fill(); ctx.stroke();
-
-//     // 🌟 ציור השחקן - עם פרופורציות מושלמות והכפלת סקייל!
-//     if (skin && !skin.isDefault && skin.dirs && skin.dirs[0]) {
-//         try {
-//             let imgPath = skin.dirs[0].startsWith('http') ? skin.dirs[0] : path.join(__dirname, 'public', skin.dirs[0]);
-//             const skinImg = await loadImage(imgPath);
-            
-//             // קבוע ההכפלה שלנו כדי שהסקייל הפנימי יהפוך לגודל יפה בתמונה
-//             let baseDisplaySize = 450; 
-//             let drawScale = skin.scale || 1;
-            
-//             // שומרים על יחס גובה-רוחב (אספקט-ריישו)
-//             let finalHeight = baseDisplaySize * drawScale;
-//             let finalWidth = finalHeight * (skinImg.width / skinImg.height);
-            
-//             ctx.drawImage(skinImg, 220 - finalWidth/2, 350 - finalHeight/2, finalWidth, finalHeight);
-//         } catch(e) { drawDefaultPlayer(); }
-//     } else { drawDefaultPlayer(); }
-
-//     function drawDefaultPlayer() {
-//         ctx.fillStyle = '#FF5252'; ctx.lineWidth = 3; ctx.strokeStyle = '#000000';
-//         ctx.beginPath(); ctx.arc(220, 340, 45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-//         ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.arc(205, 330, 12, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(235, 330, 12, 0, Math.PI*2); ctx.fill();
-//         ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(205, 330, 5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(235, 330, 5, 0, Math.PI*2); ctx.fill();
-//     }
-
-//     // 🌟 צללים רכים ועיצוב טקסט מודרני (ללא גבולות שחורים גסים!)
-//     ctx.shadowColor = 'rgba(0, 0, 0, 0.4)'; 
-//     ctx.shadowBlur = 6; 
-//     ctx.shadowOffsetX = 2; 
-//     ctx.shadowOffsetY = 2;
-    
-//     // אווטאר וכינוי
-//     try {
-//         const avatar = await loadImage(finalAvatarUrl);
-//         ctx.save(); ctx.beginPath(); ctx.arc(70, 70, 45, 0, Math.PI * 2); ctx.clip(); ctx.drawImage(avatar, 25, 25, 90, 90); ctx.restore();
-//         ctx.lineWidth = 3; ctx.strokeStyle = themeColor || '#FFD54F'; ctx.beginPath(); ctx.arc(70, 70, 45, 0, Math.PI * 2); ctx.stroke();
-//     } catch(e) {}
-    
-//     ctx.fillStyle = '#FFFFFF'; 
-//     ctx.font = 'bold 50px "Segoe UI", sans-serif'; 
-//     ctx.fillText(finalName, 140, 85); 
-
-//     // סטרייק
-//     try {
-//         const fireImg = await loadImage('https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f525.png');
-//         ctx.drawImage(fireImg, 750, 45, 45, 45); 
-//     } catch(e) {}
-//     ctx.font = 'bold 45px "Segoe UI", sans-serif';
-//     ctx.fillText(streak.toString(), 805, 85); 
-
-//     // ניקוד ראשי (היחיד ששמרנו לו מסגרת כדי שיבלוט ממש, אבל מעודנת יותר)
-//     ctx.fillStyle = themeColor || '#FFD54F'; 
-//     ctx.lineWidth = 3; ctx.strokeStyle = '#000000';
-//     ctx.font = 'bold 130px "Segoe UI", sans-serif'; 
-//     ctx.fillText(score.toString(), 480, 220); 
-//     ctx.strokeText(score.toString(), 480, 220);
-
-//     // נתונים (ללא גבולות שחורים, נקי ומודרני!)
-//     if (isWin) {
-//         ctx.font = 'bold 42px "Segoe UI", sans-serif'; 
-//         let labels = ['Tries Used:', 'Crystals:', 'Moves:'];
-//         let values = [triesUsed.toString(), `${crystals}/3`, (moves !== undefined && moves !== null) ? moves.toString() : '0'];
-
-//         for(let i=0; i<3; i++) {
-//             let yPos = 320 + i * 70;
-//             ctx.fillStyle = '#E0E0E0'; // צבע בהיר קצת אפור לכותרות
-//             ctx.fillText(labels[i], 480, yPos); 
-//             ctx.fillStyle = themeColor || '#FFD54F'; // צבע ה-Theme לנתונים עצמם
-//             ctx.fillText(values[i], 760, yPos); 
-//         }
-//     } else {
-//         ctx.fillStyle = '#FF5252';
-//         ctx.font = 'bold 60px "Segoe UI", sans-serif'; 
-//         ctx.fillText("FAILED THIS LEVEL", 480, 360);
-//         ctx.fillStyle = '#DDDDDD';
-//         ctx.font = 'bold 35px "Segoe UI", sans-serif';
-//         ctx.fillText("Try again tomorrow!", 480, 420);
-//     }
-
-//     return canvas.toBuffer('image/png');
-// }
-
 async function generateResultImage(stats, streak, member) {
     const { isWin, score, triesUsed, crystals, moves, biome, themeColor, skin, bgTheme, pack } = stats;
     
@@ -438,15 +300,9 @@ async function generateResultImage(stats, streak, member) {
     const canvas = createCanvas(900, 500);
     const ctx = canvas.getContext('2d');
     
-    // פונקציית עזר לציור מלבנים מעוגלים (UI Panels)
-    function drawRoundedRect(x, y, w, h, r, fillColor, shadowColor = null) {
+    // פונקציית עזר לציור מלבנים מעוגלים בסגנון ציורי/קומיקס (עם מסגרת שחורה עבה)
+    function drawRoundedRect(x, y, w, h, r, fillColor) {
         ctx.save();
-        if (shadowColor) {
-            ctx.shadowColor = shadowColor;
-            ctx.shadowBlur = 15;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 5;
-        }
         ctx.fillStyle = fillColor;
         ctx.beginPath();
         ctx.moveTo(x + r, y);
@@ -460,6 +316,11 @@ async function generateResultImage(stats, streak, member) {
         ctx.quadraticCurveTo(x, y, x + r, y);
         ctx.closePath();
         ctx.fill();
+        
+        // קו מתאר שחור מודגש לסגנון הציורי
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = '#000000';
+        ctx.stroke();
         ctx.restore();
     }
 
@@ -494,7 +355,7 @@ async function generateResultImage(stats, streak, member) {
         floorPattern = ctx.createPattern(await loadImage(fPath), 'repeat');
     } catch(e) {}
 
-    // 2. ציור הפלטפורמה התלת מימדית (ללא שינוי, המיקום המושלם שלך)
+    // 2. ציור הפלטפורמה התלת מימדית שלך
     ctx.lineWidth = 3; ctx.strokeStyle = '#000000';
     ctx.fillStyle = wallPattern || biome.wallDark || '#5D4037';
     ctx.beginPath(); ctx.moveTo(90, 120); ctx.lineTo(350, 120); ctx.lineTo(380, 150); ctx.lineTo(60, 150); ctx.fill(); ctx.stroke();
@@ -505,12 +366,12 @@ async function generateResultImage(stats, streak, member) {
     ctx.fillStyle = biome.floorDark || '#558B2F';
     ctx.beginPath(); ctx.moveTo(0, 420); ctx.lineTo(440, 420); ctx.lineTo(440, 450); ctx.lineTo(0, 450); ctx.fill(); ctx.stroke();
 
-    // 3. ציור השחקן (ללא שינוי)
+    // 3. 🌟 הגדלת השחקן בתמונה (סקייל גדול יותר)
     if (skin && !skin.isDefault && skin.dirs && skin.dirs[0]) {
         try {
             let imgPath = skin.dirs[0].startsWith('http') ? skin.dirs[0] : path.join(__dirname, 'public', skin.dirs[0]);
             const skinImg = await loadImage(imgPath);
-            let baseDisplaySize = 450; 
+            let baseDisplaySize = 530; // הוגדל מ-450 ל-530
             let drawScale = skin.scale || 1;
             let finalHeight = baseDisplaySize * drawScale;
             let finalWidth = finalHeight * (skinImg.width / skinImg.height);
@@ -519,106 +380,107 @@ async function generateResultImage(stats, streak, member) {
     } else { drawDefaultPlayer(); }
 
     function drawDefaultPlayer() {
-        ctx.fillStyle = '#FF5252'; ctx.lineWidth = 3; ctx.strokeStyle = '#000000';
-        ctx.beginPath(); ctx.arc(220, 340, 45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.arc(205, 330, 12, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(235, 330, 12, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(205, 330, 5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(235, 330, 5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#FF5252'; ctx.lineWidth = 4; ctx.strokeStyle = '#000000';
+        ctx.beginPath(); ctx.arc(220, 330, 55, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); // רדיוס הוגדל ל-55
+        ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.arc(202, 320, 14, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(238, 320, 14, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(202, 320, 6, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(238, 320, 6, 0, Math.PI*2); ctx.fill();
     }
 
     // ==========================================
-    // 4. שכבת ה-UI המקצועית (מודרנית ומלוטשת)
+    // 4. שכבת ה-UI הציורית החדשה
     // ==========================================
     const primaryColor = themeColor || '#FFD54F';
     
-    // א. פאנל עליון - פרופיל שחקן
-    ctx.font = 'bold 40px "Segoe UI", sans-serif';
+    // א. פאנל עליון - פרופיל שחקן (מוקטן)
+    ctx.font = 'bold 35px "Arial Black", sans-serif';
     let nameWidth = ctx.measureText(finalName).width;
-    let profilePillWidth = Math.max(260, 120 + nameWidth);
-    drawRoundedRect(20, 20, profilePillWidth, 100, 50, 'rgba(0, 0, 0, 0.55)', 'rgba(0,0,0,0.4)');
+    let profilePillWidth = Math.max(240, 110 + nameWidth);
+    drawRoundedRect(20, 20, profilePillWidth, 90, 45, 'rgba(30, 33, 36, 0.9)');
     
     try {
         const avatar = await loadImage(finalAvatarUrl);
-        ctx.save(); ctx.beginPath(); ctx.arc(70, 70, 40, 0, Math.PI * 2); ctx.clip(); ctx.drawImage(avatar, 30, 30, 80, 80); ctx.restore();
-        ctx.lineWidth = 4; ctx.strokeStyle = primaryColor; ctx.beginPath(); ctx.arc(70, 70, 40, 0, Math.PI * 2); ctx.stroke();
+        ctx.save(); ctx.beginPath(); ctx.arc(65, 65, 35, 0, Math.PI * 2); ctx.clip(); ctx.drawImage(avatar, 30, 30, 70, 70); ctx.restore();
+        ctx.lineWidth = 4; ctx.strokeStyle = primaryColor; ctx.beginPath(); ctx.arc(65, 65, 35, 0, Math.PI * 2); ctx.stroke();
     } catch(e) {}
     
     ctx.fillStyle = '#FFFFFF'; 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(finalName, 130, 70);
+    ctx.fillText(finalName, 120, 65);
 
-    // ב. פאנל עליון - סטרייק
-    drawRoundedRect(720, 25, 160, 85, 40, 'rgba(0, 0, 0, 0.55)', 'rgba(0,0,0,0.4)');
+    // ב. 🌟 העברת הסטרייק לפינה השמאלית העליונה (צמוד לפרופיל)
+    let streakX = 20 + profilePillWidth + 15;
+    drawRoundedRect(streakX, 20, 140, 90, 45, 'rgba(30, 33, 36, 0.9)');
     try {
         const fireImg = await loadImage('https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f525.png');
-        ctx.drawImage(fireImg, 735, 42, 45, 45); 
+        ctx.drawImage(fireImg, streakX + 15, 38, 45, 45); 
     } catch(e) {}
-    ctx.font = 'bold 45px "Segoe UI", sans-serif';
+    ctx.font = 'bold 38px "Arial Black", sans-serif';
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(streak.toString(), 795, 68);
+    ctx.fillText(streak.toString(), streakX + 75, 65);
 
-    // ג. פאנל מרכזי מימין - נתונים ותוצאה
-    drawRoundedRect(460, 130, 410, 340, 25, 'rgba(0, 0, 0, 0.65)', 'rgba(0,0,0,0.5)');
+    // ג. 🌟 פאנל מרכזי מימין (הוקטן מ-410 ל-360 רוחב)
+    drawRoundedRect(510, 140, 360, 330, 20, 'rgba(30, 33, 36, 0.9)');
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
     if (isWin) {
-        // עיצוב מצב ניצחון
-        ctx.font = 'bold 24px "Segoe UI", sans-serif';
+        ctx.font = 'bold 22px "Arial Black", sans-serif';
         ctx.fillStyle = '#AAAAAA';
-        ctx.fillText("TOTAL SCORE", 665, 155);
+        ctx.fillText("TOTAL SCORE", 690, 160);
 
-        // הניקוד הענק - מלוטש עם זוהר במקום גבול שחור
-        ctx.font = 'bold 110px "Segoe UI", sans-serif'; 
+        // ניקוד ענק עם סטרוק קומיקסי
+        ctx.font = 'bold 95px "Arial Black", sans-serif'; 
         ctx.fillStyle = primaryColor;
-        ctx.shadowColor = primaryColor;
-        ctx.shadowBlur = 15;
-        ctx.fillText(score.toString(), 665, 180);
-        ctx.shadowBlur = 0; // כיבוי זוהר לשאר הטקסטים
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = '#000000';
+        ctx.fillText(score.toString(), 690, 185);
+        ctx.strokeText(score.toString(), 690, 185);
 
-        // קו מפריד עדין
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.fillRect(490, 320, 350, 2);
+        // קו מפריד שחור עבה
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(530, 305, 320, 4);
 
-        // רשימת הנתונים (מיושרת לשני הצדדים)
-        ctx.font = 'bold 32px "Segoe UI", sans-serif'; 
+        // רשימת הנתונים במצב ניצחון
+        ctx.font = 'bold 26px "Arial Black", sans-serif'; 
         let labels = ['Tries Used', 'Crystals', 'Moves'];
         let values = [triesUsed.toString(), `${crystals}/3`, (moves !== undefined && moves !== null) ? moves.toString() : '0'];
 
         for(let i=0; i<3; i++) {
-            let yPos = 340 + i * 42;
+            let yPos = 325 + i * 38;
             ctx.textAlign = 'left';
-            ctx.fillStyle = '#DDDDDD';
-            ctx.fillText(labels[i], 500, yPos); 
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText(labels[i], 535, yPos); 
             ctx.textAlign = 'right';
             ctx.fillStyle = primaryColor;
-            ctx.fillText(values[i], 830, yPos); 
+            ctx.fillText(values[i], 845, yPos); 
         }
 
     } else {
-        // עיצוב מצב הפסד
-        ctx.font = 'bold 24px "Segoe UI", sans-serif';
+        ctx.font = 'bold 22px "Arial Black", sans-serif';
         ctx.fillStyle = '#AAAAAA';
-        ctx.fillText("SCORE", 665, 155);
+        ctx.fillText("SCORE", 690, 160);
 
-        // הציון 0
-        ctx.font = 'bold 140px "Segoe UI", sans-serif'; 
+        ctx.font = 'bold 120px "Arial Black", sans-serif'; 
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText("0", 665, 180);
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = '#000000';
+        ctx.fillText("0", 690, 185);
+        ctx.strokeText("0", 690, 185);
 
-        // כפתור / באנר אדום להודעת ההפסד בתוך הפאנל
-        drawRoundedRect(485, 330, 360, 65, 15, 'rgba(255, 82, 82, 0.85)');
+        // באנר הפסד ציורי אדום
+        drawRoundedRect(530, 320, 320, 60, 15, '#FF5252');
         
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = 'bold 36px "Segoe UI", sans-serif';
+        ctx.font = 'bold 30px "Arial Black", sans-serif';
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText("FAILED THIS", 665, 363);
+        ctx.fillText("FAILED THIS", 690, 350);
 
-        ctx.font = 'bold 26px "Segoe UI", sans-serif';
-        ctx.fillStyle = '#BBBBBB';
-        ctx.fillText("Try again tomorrow!", 665, 430);
+        ctx.font = 'bold 22px "Arial Black", sans-serif';
+        ctx.fillStyle = '#CCCCCC';
+        ctx.fillText("Try again tomorrow!", 690, 420);
     }
 
     return canvas.toBuffer('image/png');
