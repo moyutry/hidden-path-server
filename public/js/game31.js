@@ -9,8 +9,201 @@ window.PlayerData = {
 };
 
 
+// // ==========================================
+// // BOOT SCENE - INSANE CINEMATIC INTRO
+// // ==========================================
+// class BootScene extends Phaser.Scene {
+//     constructor() { super('BootScene'); }
+    
+//     preload() {
+//         this.load.image('tex_floor', 'assets/images/floor.png');         
+//         this.load.image('tex_wall', 'assets/images/wall.png');           
+//         this.load.image('tex_bridge', 'assets/images/bridge.png');       
+//         this.load.image('tex_trap_off', 'assets/images/trap_off.png');   
+//         this.load.image('tex_trap_on', 'assets/images/trap_on.png');     
+//         this.load.image('tex_crystal', 'assets/images/crystal.png');     
+//         this.load.image('tex_exit', 'assets/images/exit.png');           
+//         this.load.spritesheet('tex_water', 'assets/images/water_spritesheet.png', { frameWidth: 128, frameHeight: 128 });
+//         this.load.image('default', 'assets/images/bg_game.png'); 
+//     }
+
+//     async create() {
+//         // --- 1. רקע אפל ושכבות עומק (Parallax Starfield) ---
+//         this.cameras.main.setBackgroundColor('#030305');
+        
+//         // יוצר גרפיקה של "כוכב" קטן לשימוש בחלקיקים מבלי לטעון תמונה חיצונית
+//         let starGfx = this.make.graphics({x:0, y:0, add:false});
+//         starGfx.fillStyle(0xffffff, 1);
+//         starGfx.fillCircle(4, 4, 4);
+//         starGfx.generateTexture('flare', 8, 8);
+
+//         this.particlesBase = this.add.particles(0, 0, 'flare', {
+//             x: { min: 0, max: this.scale.width },
+//             y: { min: 0, max: this.scale.height },
+//             scale: { start: 0.2, end: 0.8 },
+//             alpha: { start: 0, end: 0.5 },
+//             lifespan: 3000,
+//             speedY: { min: -20, max: -50 },
+//             blendMode: 'ADD',
+//             frequency: 100
+//         });
+
+//         // --- 2. טיפוגרפיית טעינה ופס פועם ---
+//         const comicFont = '"Arial Black", sans-serif';
+//         let loadingText = this.add.text(this.scale.width/2, this.scale.height/2 + 80, 'ESTABLISHING CONNECTION...', { 
+//             fontFamily: comicFont, fontSize: '30px', fill: '#00E5FF', fontStyle: 'bold', letterSpacing: 8 
+//         }).setOrigin(0.5);
+        
+//         this.tweens.add({ targets: loadingText, alpha: 0.3, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+//         const barBg = this.add.graphics().fillStyle(0x111111, 1).lineStyle(2, 0x00E5FF, 0.3).fillRoundedRect(this.scale.width/2 - 300, this.scale.height/2 + 150, 600, 8, 4).strokeRoundedRect(this.scale.width/2 - 300, this.scale.height/2 + 150, 600, 8, 4);
+//         const barFill = this.add.graphics();
+//         let fakeProgress = 0;
+//         const progressInterval = setInterval(() => {
+//             fakeProgress += 0.02;
+//             if (fakeProgress > 0.85) fakeProgress = 0.85; 
+//             barFill.clear().fillStyle(0x00E5FF, 1).fillRoundedRect(this.scale.width/2 - 300, this.scale.height/2 + 150, 600 * fakeProgress, 8, 4);
+//         }, 100);
+
+//         // ==========================================
+//         // משיכת נתונים מהשרת ודיסקורד SDK 
+//         // ==========================================
+//         try {
+//             const { DiscordSDK } = await import('/discord-sdk.js');
+//             const discordSdk = new DiscordSDK('1518734375934754816');
+//             await discordSdk.ready();
+//             const { code } = await discordSdk.commands.authorize({ client_id: '1518734375934754816', response_type: 'code', state: '', prompt: 'none', scope: ['identify'] });
+//             const response = await fetch('/api/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+//             const { access_token } = await response.json();
+            
+//             window.PlayerData.accessToken = `Bearer ${access_token}`;
+//             const auth = await discordSdk.commands.authenticate({ access_token });
+
+//             const initResponse = await fetch('/api/init', { 
+//                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': window.PlayerData.accessToken }, 
+//                 body: JSON.stringify({ guildId: discordSdk.guildId }) 
+//             });
+//             const initData = await initResponse.json();
+
+//             if (initData.discordProfile) {
+//                 window.PlayerData.username = initData.discordProfile.displayName;
+//                 window.PlayerData.avatarUrl = initData.discordProfile.avatarUrl || `https://cdn.discordapp.com/embed/avatars/0.png`;
+//             } else {
+//                 window.PlayerData.username = auth.user.username;
+//                 window.PlayerData.avatarUrl = auth.user.avatar ? `https://cdn.discordapp.com/avatars/${auth.user.id}/${auth.user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/0.png`;
+//             }
+//             window.PlayerData.channelId = discordSdk.channelId;
+//             window.DailyData = initData.dailyData; window.OwnedAssets = initData.ownedAssets; 
+//             let dbPlayer = initData.player;
+//             window.PlayerData.discordId = dbPlayer.discordId; window.PlayerData.coins = dbPlayer.coins; window.PlayerData.lastPlayedDay = dbPlayer.lastPlayedDay;
+//             window.PlayerData.triesLeft = dbPlayer.triesLeft; window.PlayerData.unlockedSkins = dbPlayer.unlockedSkins; window.PlayerData.currentSkin = dbPlayer.currentSkin;
+//             window.PlayerData.unlockedPacks = dbPlayer.unlockedPacks; window.PlayerData.currentPack = dbPlayer.currentPack; window.PlayerData.unlockedBGs = dbPlayer.unlockedBGs;
+//             window.PlayerData.currentBG = dbPlayer.currentBG; window.PlayerData.lastSolvedLevel = dbPlayer.lastSolvedLevel;
+
+//         } catch (e) { 
+//             console.log("Local Mode or Error:", e); 
+//             window.OwnedAssets = { skins: [{ id: 'default', isDefault: true }], packs: [{ id: 'default', isDefault: true, biome: { floor: '#8BC34A', floorDark: '#5D4037', wall: '#795548', wallDark: '#5D4037', trap: '#29B6F6', trapDark: '#0288D1' } }], bgs: [{ id: 'default', isDefault: true, uiMain: 16301008, uiDark: 12720219 }] };
+//             window.DailyData = { levelNumber: 0, bgs: [], packs: [], skins: [], mapData: [], spikeTraps: [], crystalsLogic: [], bridgeLogic: null, parScore: 10 };
+//         }
+
+//         loadingText.setText('DECRYPTING ASSETS...');
+//         if (window.PlayerData.avatarUrl) { this.load.image('discord_avatar', window.PlayerData.avatarUrl); }
+
+//         let previewItems = new Set();
+//         if(window.DailyData.bgs) window.DailyData.bgs.forEach(i => previewItems.add(i.id));
+//         if(window.DailyData.packs) window.DailyData.packs.forEach(i => previewItems.add(i.id));
+//         if(window.DailyData.skins) window.DailyData.skins.forEach(i => previewItems.add(i.id));
+//         if(window.OwnedAssets.bgs) window.OwnedAssets.bgs.forEach(i => previewItems.add(i.id));
+//         if(window.OwnedAssets.packs) window.OwnedAssets.packs.forEach(i => previewItems.add(i.id));
+//         if(window.OwnedAssets.skins) window.OwnedAssets.skins.forEach(i => previewItems.add(i.id));
+//         previewItems.forEach(id => { if (id !== 'default') this.load.image(`preview_${id}`, `assets/images/${id}.png`); });
+//         window.OwnedAssets.bgs.forEach(bg => { if (bg.id !== 'default' && bg.image) this.load.image(bg.id, bg.image); });
+//         window.OwnedAssets.skins.forEach(skin => { if (!skin.isDefault && skin.dirs) skin.dirs.forEach((dirImg, index) => { this.load.image(`${skin.id}_${index}`, dirImg); }); });
+//         const currentPack = window.OwnedAssets.packs.find(p => p.id === window.PlayerData.currentPack);
+//         if (currentPack && currentPack.textures) {
+//             if (currentPack.textures.floor) this.load.image('custom_floor', currentPack.textures.floor);
+//             if (currentPack.textures.wall) this.load.image('custom_wall', currentPack.textures.wall);
+//         }
+
+//         // חיבור לבר הטעינה של פייזר
+//         this.load.on('progress', (value) => {
+//             clearInterval(progressInterval);
+//             barFill.clear().fillStyle(0x00E5FF, 1).fillRoundedRect(this.scale.width/2 - 300, this.scale.height/2 + 150, 600 * (0.85 + value*0.15), 8, 4);
+//         });
+
+//         this.load.once('complete', () => { 
+//             // ==============================================
+//             // 🔥 THE CINEMATIC CLIMAX 🔥
+//             // ==============================================
+//             loadingText.destroy(); barBg.destroy(); barFill.destroy();
+            
+//             // 1. קריסה למרכז (Implosion)
+//             this.tweens.add({
+//                 targets: this.cameras.main,
+//                 zoom: 1.1,
+//                 duration: 600,
+//                 ease: 'Quad.easeIn'
+//             });
+
+//             // מושך את כל החלקיקים למרכז כמו חור שחור
+//             const gravityZone = this.add.zone(this.scale.width/2, this.scale.height/2, this.scale.width, this.scale.height);
+//             this.particlesBase.setGravity(0, 0).setDeathZone({ type: 'onEnter', source: new Phaser.Geom.Circle(this.scale.width/2, this.scale.height/2, 50) });
+//             this.particlesBase.speed = -800; // תנועה אחורה למרכז
+            
+//             this.time.delayedCall(600, () => {
+//                 this.particlesBase.destroy();
+//                 this.cameras.main.zoom = 1;
+//                 this.cameras.main.shake(500, 0.02);
+
+//                 // 2. פיצוץ הילה (Supernova)
+//                 let shockwave = this.add.graphics();
+//                 shockwave.lineStyle(20, 0x00E5FF, 1);
+//                 shockwave.strokeCircle(this.scale.width/2, this.scale.height/2, 10);
+//                 this.tweens.add({
+//                     targets: shockwave,
+//                     scale: 30, alpha: 0,
+//                     duration: 800, ease: 'Expo.easeOut',
+//                     onComplete: () => shockwave.destroy()
+//                 });
+
+//                 // 3. הופעת כותרת בשיטת Chromatic Aberration
+//                 const titleStyle = { fontFamily: comicFont, fontSize: '130px', fill: '#FFFFFF', fontStyle: 'bold', align: 'center' };
+                
+//                 // שכבת רפאים אדומה וכחולה מאחור לשבירת צבע קולנועית
+//                 let titleRed = this.add.text(this.scale.width/2 - 40, this.scale.height/2, 'THE HIDDEN\nPATH', { ...titleStyle, fill: '#FF0055' }).setOrigin(0.5).setScale(0.1).setBlendMode('SCREEN').setAlpha(0);
+//                 let titleBlue = this.add.text(this.scale.width/2 + 40, this.scale.height/2, 'THE HIDDEN\nPATH', { ...titleStyle, fill: '#00E5FF' }).setOrigin(0.5).setScale(0.1).setBlendMode('SCREEN').setAlpha(0);
+//                 let titleMain = this.add.text(this.scale.width/2, this.scale.height/2, 'THE HIDDEN\nPATH', titleStyle).setOrigin(0.5).setScale(0.1).setAlpha(0);
+//                 titleMain.setShadow(0, 0, '#000000', 30, false, true);
+
+//                 // הנחתה עוצמתית של הטקסט פנימה
+//                 this.tweens.add({ targets: [titleRed, titleBlue, titleMain], scale: 1, alpha: 1, duration: 400, ease: 'Back.easeOut', easeParams: [1.2] });
+                
+//                 // איחוד הצבעים לתוך הלבן (סגירת אפקט הגליצ')
+//                 this.tweens.add({ targets: titleRed, x: this.scale.width/2, duration: 300, delay: 200, ease: 'Expo.easeOut' });
+//                 this.tweens.add({ targets: titleBlue, x: this.scale.width/2, duration: 300, delay: 200, ease: 'Expo.easeOut' });
+
+//                 // 4. תעופת מצלמה פנימה (Zoom-Through Transition)
+//                 this.time.delayedCall(1600, () => {
+//                     // טיסה סופר מהירה אל תוך הרווח שבאותיות
+//                     this.cameras.main.pan(this.scale.width/2, this.scale.height/2 + 65, 800, 'Expo.easeIn');
+//                     this.cameras.main.zoomTo(60, 800, 'Expo.easeIn');
+                    
+//                     // מסך מלבין במקביל כדי להפוך את המעבר לבלתי מורגש
+//                     this.cameras.main.fadeOut(700, 255, 255, 255);
+                    
+//                     this.cameras.main.once('camerafadeoutcomplete', () => {
+//                         this.scene.start('LobbyScene', { direction: 'right' });
+//                     });
+//                 });
+//             });
+//         });
+        
+//         this.load.start();
+//     }
+// }
+
 // ==========================================
-// BOOT SCENE - INSANE CINEMATIC INTRO
+// BOOT SCENE - MASSIVE 3D CINEMATIC INTRO
 // ==========================================
 class BootScene extends Phaser.Scene {
     constructor() { super('BootScene'); }
@@ -28,45 +221,43 @@ class BootScene extends Phaser.Scene {
     }
 
     async create() {
-        // --- 1. רקע אפל ושכבות עומק (Parallax Starfield) ---
+        // --- 1. אווירת חלל התחלתית (מסווה את הטעינה) ---
         this.cameras.main.setBackgroundColor('#030305');
         
-        // יוצר גרפיקה של "כוכב" קטן לשימוש בחלקיקים מבלי לטעון תמונה חיצונית
         let starGfx = this.make.graphics({x:0, y:0, add:false});
-        starGfx.fillStyle(0xffffff, 1);
-        starGfx.fillCircle(4, 4, 4);
-        starGfx.generateTexture('flare', 8, 8);
+        starGfx.fillStyle(0xffffff, 1); starGfx.fillCircle(2, 2, 2); starGfx.generateTexture('flare', 4, 4);
 
-        this.particlesBase = this.add.particles(0, 0, 'flare', {
+        this.ambientStars = this.add.particles(0, -50, 'flare', {
             x: { min: 0, max: this.scale.width },
             y: { min: 0, max: this.scale.height },
-            scale: { start: 0.2, end: 0.8 },
-            alpha: { start: 0, end: 0.5 },
             lifespan: 3000,
-            speedY: { min: -20, max: -50 },
-            blendMode: 'ADD',
-            frequency: 100
+            speedY: { min: 100, max: 300 }, // כוכבים זורמים לאט כלפי מטה
+            scale: { start: 0, end: 1 },
+            alpha: { start: 0, end: 0.5 },
+            blendMode: 'ADD'
         });
 
-        // --- 2. טיפוגרפיית טעינה ופס פועם ---
-        const comicFont = '"Arial Black", sans-serif';
-        let loadingText = this.add.text(this.scale.width/2, this.scale.height/2 + 80, 'ESTABLISHING CONNECTION...', { 
-            fontFamily: comicFont, fontSize: '30px', fill: '#00E5FF', fontStyle: 'bold', letterSpacing: 8 
-        }).setOrigin(0.5);
-        
-        this.tweens.add({ targets: loadingText, alpha: 0.3, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        // טקסט טעינה חריג (מוסתר כברירת מחדל)
+        this.fallbackLoading = this.add.text(this.scale.width/2, this.scale.height - 50, 'Loading internal systems...', { 
+            fontFamily: '"Arial Black", sans-serif', fontSize: '20px', fill: '#666666' 
+        }).setOrigin(0.5).setAlpha(0);
 
-        const barBg = this.add.graphics().fillStyle(0x111111, 1).lineStyle(2, 0x00E5FF, 0.3).fillRoundedRect(this.scale.width/2 - 300, this.scale.height/2 + 150, 600, 8, 4).strokeRoundedRect(this.scale.width/2 - 300, this.scale.height/2 + 150, 600, 8, 4);
-        const barFill = this.add.graphics();
-        let fakeProgress = 0;
-        const progressInterval = setInterval(() => {
-            fakeProgress += 0.02;
-            if (fakeProgress > 0.85) fakeProgress = 0.85; 
-            barFill.clear().fillStyle(0x00E5FF, 1).fillRoundedRect(this.scale.width/2 - 300, this.scale.height/2 + 150, 600 * fakeProgress, 8, 4);
-        }, 100);
+        // --- 2. לוגיקת הטעינה החכמה ---
+        let isLoaded = false;
+        let isCinematicTimePassed = false;
+
+        // נותנים לסינמטיקה מינימום 2.5 שניות לרוץ בשביל האווירה
+        this.time.delayedCall(2500, () => {
+            isCinematicTimePassed = true;
+            if (isLoaded) {
+                this.triggerMarvelClimax();
+            } else {
+                this.fallbackLoading.setAlpha(1); // מציג את הטקסט רק אם הטעינה מתעכבת!
+            }
+        });
 
         // ==========================================
-        // משיכת נתונים מהשרת ודיסקורד SDK 
+        // משיכת הנתונים מהשרת ברקע
         // ==========================================
         try {
             const { DiscordSDK } = await import('/discord-sdk.js');
@@ -94,6 +285,7 @@ class BootScene extends Phaser.Scene {
             }
             window.PlayerData.channelId = discordSdk.channelId;
             window.DailyData = initData.dailyData; window.OwnedAssets = initData.ownedAssets; 
+            
             let dbPlayer = initData.player;
             window.PlayerData.discordId = dbPlayer.discordId; window.PlayerData.coins = dbPlayer.coins; window.PlayerData.lastPlayedDay = dbPlayer.lastPlayedDay;
             window.PlayerData.triesLeft = dbPlayer.triesLeft; window.PlayerData.unlockedSkins = dbPlayer.unlockedSkins; window.PlayerData.currentSkin = dbPlayer.currentSkin;
@@ -106,7 +298,6 @@ class BootScene extends Phaser.Scene {
             window.DailyData = { levelNumber: 0, bgs: [], packs: [], skins: [], mapData: [], spikeTraps: [], crystalsLogic: [], bridgeLogic: null, parScore: 10 };
         }
 
-        loadingText.setText('DECRYPTING ASSETS...');
         if (window.PlayerData.avatarUrl) { this.load.image('discord_avatar', window.PlayerData.avatarUrl); }
 
         let previewItems = new Set();
@@ -119,86 +310,87 @@ class BootScene extends Phaser.Scene {
         previewItems.forEach(id => { if (id !== 'default') this.load.image(`preview_${id}`, `assets/images/${id}.png`); });
         window.OwnedAssets.bgs.forEach(bg => { if (bg.id !== 'default' && bg.image) this.load.image(bg.id, bg.image); });
         window.OwnedAssets.skins.forEach(skin => { if (!skin.isDefault && skin.dirs) skin.dirs.forEach((dirImg, index) => { this.load.image(`${skin.id}_${index}`, dirImg); }); });
+        
         const currentPack = window.OwnedAssets.packs.find(p => p.id === window.PlayerData.currentPack);
         if (currentPack && currentPack.textures) {
             if (currentPack.textures.floor) this.load.image('custom_floor', currentPack.textures.floor);
             if (currentPack.textures.wall) this.load.image('custom_wall', currentPack.textures.wall);
         }
 
-        // חיבור לבר הטעינה של פייזר
-        this.load.on('progress', (value) => {
-            clearInterval(progressInterval);
-            barFill.clear().fillStyle(0x00E5FF, 1).fillRoundedRect(this.scale.width/2 - 300, this.scale.height/2 + 150, 600 * (0.85 + value*0.15), 8, 4);
-        });
-
         this.load.once('complete', () => { 
-            // ==============================================
-            // 🔥 THE CINEMATIC CLIMAX 🔥
-            // ==============================================
-            loadingText.destroy(); barBg.destroy(); barFill.destroy();
-            
-            // 1. קריסה למרכז (Implosion)
-            this.tweens.add({
-                targets: this.cameras.main,
-                zoom: 1.1,
-                duration: 600,
-                ease: 'Quad.easeIn'
-            });
+            isLoaded = true;
+            if (isCinematicTimePassed) {
+                this.triggerMarvelClimax();
+            }
+        });
+        
+        this.load.start();
+    }
 
-            // מושך את כל החלקיקים למרכז כמו חור שחור
-            const gravityZone = this.add.zone(this.scale.width/2, this.scale.height/2, this.scale.width, this.scale.height);
-            this.particlesBase.setGravity(0, 0).setDeathZone({ type: 'onEnter', source: new Phaser.Geom.Circle(this.scale.width/2, this.scale.height/2, 50) });
-            this.particlesBase.speed = -800; // תנועה אחורה למרכז
-            
-            this.time.delayedCall(600, () => {
-                this.particlesBase.destroy();
-                this.cameras.main.zoom = 1;
-                this.cameras.main.shake(500, 0.02);
+    triggerMarvelClimax() {
+        this.fallbackLoading.destroy();
+        this.ambientStars.destroy(); // מעלימים את כוכבי הרקע
 
-                // 2. פיצוץ הילה (Supernova)
-                let shockwave = this.add.graphics();
-                shockwave.lineStyle(20, 0x00E5FF, 1);
-                shockwave.strokeCircle(this.scale.width/2, this.scale.height/2, 10);
-                this.tweens.add({
-                    targets: shockwave,
-                    scale: 30, alpha: 0,
-                    duration: 800, ease: 'Expo.easeOut',
-                    onComplete: () => shockwave.destroy()
-                });
+        // פלאש לבן שמתחיל את הקליימקס
+        this.cameras.main.flash(300, 255, 255, 255);
 
-                // 3. הופעת כותרת בשיטת Chromatic Aberration
-                const titleStyle = { fontFamily: comicFont, fontSize: '130px', fill: '#FFFFFF', fontStyle: 'bold', align: 'center' };
+        // --- יצירת הטקסט התלת-מימדי (Extrusion) ---
+        this.titleContainer = this.add.container(this.scale.width / 2, this.scale.height / 2);
+        
+        const depth = 16; // עומק התלת מימד
+        for (let i = depth; i >= 0; i--) {
+            let isTop = (i === 0);
+            // השכבות התחתונות שחורות/אפורות כדי ליצור עומק, והעליונה לבנה בוהקת
+            let textColor = isTop ? '#FFFFFF' : '#111111';
+            let strokeColor = isTop ? '#00E5FF' : '#000000';
+            let strokeThick = isTop ? 10 : 25;
+
+            let layerText = this.add.text(0, i * 4, 'THE HIDDEN\nPATH', {
+                fontFamily: '"Arial Black", sans-serif',
+                fontSize: '120px',
+                fill: textColor,
+                fontStyle: 'bold',
+                align: 'center',
+                stroke: strokeColor,
+                strokeThickness: strokeThick
+            }).setOrigin(0.5);
+
+            if (isTop) layerText.setShadow(0, 0, '#00E5FF', 30);
+            this.titleContainer.add(layerText);
+        }
+
+        // מתחיל עצום ובלתי נראה
+        this.titleContainer.setScale(25);
+        this.titleContainer.setAlpha(0);
+
+        // מופיע במהירות (Alpha)
+        this.tweens.add({ targets: this.titleContainer, alpha: 1, duration: 400 });
+
+        // זום-אאוט איטי ועוצמתי (נחיתה תלת מימדית)
+        this.tweens.add({
+            targets: this.titleContainer,
+            scale: 1,
+            duration: 2500,
+            ease: 'Expo.easeOut', // מתחיל מהר מאוד ומאט לקראת הסוף
+            onComplete: () => {
+                // כשהוא נוחת - המסך רועד אימפקט של משקל
+                this.cameras.main.shake(500, 0.015);
                 
-                // שכבת רפאים אדומה וכחולה מאחור לשבירת צבע קולנועית
-                let titleRed = this.add.text(this.scale.width/2 - 40, this.scale.height/2, 'THE HIDDEN\nPATH', { ...titleStyle, fill: '#FF0055' }).setOrigin(0.5).setScale(0.1).setBlendMode('SCREEN').setAlpha(0);
-                let titleBlue = this.add.text(this.scale.width/2 + 40, this.scale.height/2, 'THE HIDDEN\nPATH', { ...titleStyle, fill: '#00E5FF' }).setOrigin(0.5).setScale(0.1).setBlendMode('SCREEN').setAlpha(0);
-                let titleMain = this.add.text(this.scale.width/2, this.scale.height/2, 'THE HIDDEN\nPATH', titleStyle).setOrigin(0.5).setScale(0.1).setAlpha(0);
-                titleMain.setShadow(0, 0, '#000000', 30, false, true);
-
-                // הנחתה עוצמתית של הטקסט פנימה
-                this.tweens.add({ targets: [titleRed, titleBlue, titleMain], scale: 1, alpha: 1, duration: 400, ease: 'Back.easeOut', easeParams: [1.2] });
-                
-                // איחוד הצבעים לתוך הלבן (סגירת אפקט הגליצ')
-                this.tweens.add({ targets: titleRed, x: this.scale.width/2, duration: 300, delay: 200, ease: 'Expo.easeOut' });
-                this.tweens.add({ targets: titleBlue, x: this.scale.width/2, duration: 300, delay: 200, ease: 'Expo.easeOut' });
-
-                // 4. תעופת מצלמה פנימה (Zoom-Through Transition)
-                this.time.delayedCall(1600, () => {
-                    // טיסה סופר מהירה אל תוך הרווח שבאותיות
-                    this.cameras.main.pan(this.scale.width/2, this.scale.height/2 + 65, 800, 'Expo.easeIn');
-                    this.cameras.main.zoomTo(60, 800, 'Expo.easeIn');
+                // --- טיסה אל תוך הטקסט למעבר לסצנה הבאה ---
+                this.time.delayedCall(800, () => {
+                    // המצלמה ממקדת את עצמה וחותכת קדימה
+                    this.cameras.main.pan(this.scale.width/2, this.scale.height/2 + 40, 900, 'Expo.easeIn');
+                    this.cameras.main.zoomTo(60, 900, 'Expo.easeIn');
                     
-                    // מסך מלבין במקביל כדי להפוך את המעבר לבלתי מורגש
-                    this.cameras.main.fadeOut(700, 255, 255, 255);
+                    // מסך מלבין כדי שהמעבר יהיה חלק לגמרי
+                    this.cameras.main.fadeOut(800, 255, 255, 255);
                     
                     this.cameras.main.once('camerafadeoutcomplete', () => {
                         this.scene.start('LobbyScene', { direction: 'right' });
                     });
                 });
-            });
+            }
         });
-        
-        this.load.start();
     }
 }
 // ==========================================
@@ -215,6 +407,7 @@ class LobbyScene extends Phaser.Scene {
     }
     
     create() {
+        this.cameras.main.fadeIn(800, 255, 255, 255);
         const activeBg = window.OwnedAssets.bgs.find(b => b.id === window.PlayerData.currentBG);
         if (activeBg && activeBg.image) {
             document.getElementById('bg-blur').style.backgroundImage = `url('${activeBg.image}')`;
