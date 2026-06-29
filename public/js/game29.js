@@ -12,6 +12,9 @@ window.PlayerData = {
 // ==========================================
 // BOOT SCENE - DISCORD SDK & LAZY LOADING
 // ==========================================
+// ==========================================
+// BOOT SCENE - CINEMATIC MARVEL-STYLE INTRO
+// ==========================================
 class BootScene extends Phaser.Scene {
     constructor() { super('BootScene'); }
     
@@ -24,13 +27,64 @@ class BootScene extends Phaser.Scene {
         this.load.image('tex_crystal', 'assets/images/crystal.png');     
         this.load.image('tex_exit', 'assets/images/exit.png');           
         this.load.spritesheet('tex_water', 'assets/images/water_spritesheet.png', { frameWidth: 128, frameHeight: 128 });
-        this.load.image('default', 'assets/images/bg_game.png'); // טוען את הרקע הדיפולטיבי קבוע מראש
+        this.load.image('default', 'assets/images/bg_game.png'); 
     }
 
     async create() {
-        let comicFont = '"Comic Sans MS", "Chalkboard SE", "Marker Felt", sans-serif';
-        let loadingText = this.add.text(this.scale.width/2, this.scale.height/2, 'CONNECTING...', { fontFamily: comicFont, fontSize: '45px', fill: '#FFF', fontStyle: 'bold' }).setOrigin(0.5);
+        // --- 1. רקע אפל ואפקט ניצוצות קולנועי (Cinematic Sparks) ---
+        this.cameras.main.setBackgroundColor('#050508');
+        
+        const particles = this.add.particles(0, 0, 'tex_crystal', {
+            x: { min: 0, max: this.scale.width },
+            y: { min: 0, max: this.scale.height },
+            scale: { start: 0.05, end: 0 },
+            alpha: { start: 0.4, end: 0 },
+            speed: { min: 50, max: 150 },
+            angle: { min: 45, max: 135 },
+            blendMode: 'ADD',
+            lifespan: 2000,
+            frequency: 60
+        });
 
+        // --- 2. אפקט הילה (Halo Ring) הייטקיסטי מסתובב ---
+        this.haloRing = this.add.graphics();
+        this.haloRing.setPosition(this.scale.width/2, this.scale.height/2 - 50);
+        
+        this.tweens.add({ targets: this.haloRing, angle: 360, duration: 4000, repeat: -1, ease: 'Linear' });
+
+        const drawRing = (alpha, scale) => {
+            this.haloRing.clear();
+            this.haloRing.lineStyle(10, 0x00E5FF, alpha);
+            this.haloRing.beginPath(); this.haloRing.arc(0, 0, 100 * scale, 0, Phaser.Math.PI2 * 0.8); this.haloRing.strokePath();
+            this.haloRing.lineStyle(4, 0xFFFFFF, alpha + 0.2);
+            this.haloRing.beginPath(); this.haloRing.arc(0, 0, 130 * scale, Math.PI, Phaser.Math.PI2 * 1.5); this.haloRing.strokePath();
+        };
+        
+        drawRing(1, 1);
+        this.tweens.addCounter({
+            from: 0.9, to: 1.1, duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+            onUpdate: (tween) => drawRing(1, tween.getValue())
+        });
+
+        // --- 3. טקסט טעינה דרמטי ---
+        const fontStyle = { fontFamily: '"Arial Black", sans-serif', fontSize: '35px', fill: '#00E5FF', fontStyle: 'bold', letterSpacing: 8 };
+        let loadingText = this.add.text(this.scale.width/2, this.scale.height/2 + 150, 'INITIALIZING SYSTEMS...', fontStyle).setOrigin(0.5);
+        loadingText.setShadow(0, 0, '#00E5FF', 15);
+        this.tweens.add({ targets: loadingText, alpha: 0.4, duration: 600, yoyo: true, repeat: -1 });
+
+        // --- 4. פס התקדמות זוהר שמתמלא בהדרגה ---
+        const barBg = this.add.graphics().fillStyle(0x222222, 1).fillRoundedRect(this.scale.width/2 - 250, this.scale.height/2 + 220, 500, 12, 6);
+        const barFill = this.add.graphics();
+        let fakeProgress = 0;
+        const progressInterval = setInterval(() => {
+            fakeProgress += 0.05;
+            if (fakeProgress > 0.8) fakeProgress = 0.8; // עוצר קצת לפני הסוף עד שהשרת יענה
+            barFill.clear().fillStyle(0x00E5FF, 1).fillRoundedRect(this.scale.width/2 - 250, this.scale.height/2 + 220, 500 * fakeProgress, 12, 6);
+        }, 200);
+
+        // ==========================================
+        // משיכת נתונים מהשרת ודיסקורד SDK (רץ ברקע)
+        // ==========================================
         try {
             const { DiscordSDK } = await import('/discord-sdk.js');
             const discordSdk = new DiscordSDK('1518734375934754816');
@@ -41,24 +95,15 @@ class BootScene extends Phaser.Scene {
             const response = await fetch('/api/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
             const { access_token } = await response.json();
             
-            // 1. קודם כל שומרים את האסימון המאובטח
             window.PlayerData.accessToken = `Bearer ${access_token}`;
             const auth = await discordSdk.commands.authenticate({ access_token });
 
-            // 2. טעינת שם ותמונת פרופיל
-            window.PlayerData.username = auth.user.username;
-            window.PlayerData.avatarUrl = auth.user.avatar ? `https://cdn.discordapp.com/avatars/${auth.user.id}/${auth.user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/0.png`;
-            window.PlayerData.channelId = discordSdk.channelId;
-
-            // משיכת כל הנתונים, החנות והנכסים מהשרת במכה אחת!
-            // משיכת כל הנתונים (מוסיפים את ה-guildId כדי שהשרת יביא את ה-Display Name)
             const initResponse = await fetch('/api/init', { 
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': window.PlayerData.accessToken }, 
                 body: JSON.stringify({ guildId: discordSdk.guildId }) 
             });
             const initData = await initResponse.json();
 
-            // מעדכנים את השם והתמונה לפי השרת שבו אנחנו נמצאים!
             if (initData.discordProfile) {
                 window.PlayerData.username = initData.discordProfile.displayName;
                 window.PlayerData.avatarUrl = initData.discordProfile.avatarUrl || `https://cdn.discordapp.com/embed/avatars/0.png`;
@@ -66,9 +111,10 @@ class BootScene extends Phaser.Scene {
                 window.PlayerData.username = auth.user.username;
                 window.PlayerData.avatarUrl = auth.user.avatar ? `https://cdn.discordapp.com/avatars/${auth.user.id}/${auth.user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/0.png`;
             }
-            // שומרים את הכל למשחק
+            window.PlayerData.channelId = discordSdk.channelId;
+
             window.DailyData = initData.dailyData;
-            window.OwnedAssets = initData.ownedAssets; // רק הפריטים ששייכים לי!
+            window.OwnedAssets = initData.ownedAssets; 
             
             let dbPlayer = initData.player;
             window.PlayerData.discordId = dbPlayer.discordId;
@@ -85,7 +131,6 @@ class BootScene extends Phaser.Scene {
 
         } catch (e) { 
             console.log("Local Mode or Error:", e); 
-            // נתוני חירום: אם הדיסקורד או השרת נכשלים, אנחנו שמים נתוני בסיס כדי שהמשחק לא יקרוס!
             window.OwnedAssets = { 
                 skins: [{ id: 'default', isDefault: true }], 
                 packs: [{ id: 'default', isDefault: true, biome: { floor: '#8BC34A', floorDark: '#5D4037', wall: '#795548', wallDark: '#5D4037', trap: '#29B6F6', trapDark: '#0288D1' } }], 
@@ -98,8 +143,6 @@ class BootScene extends Phaser.Scene {
 
         if (window.PlayerData.avatarUrl) { this.load.image('discord_avatar', window.PlayerData.avatarUrl); }
 
-        // עכשיו הוא טוען תמונות רק מתוך מה שהוא מחזיק (OwnedAssets)
-        // 1. אוסף רק את הפריטים שצריך להראות להם תמונה קטנה בחנות ובלוקר
         let previewItems = new Set();
         if(window.DailyData.bgs) window.DailyData.bgs.forEach(i => previewItems.add(i.id));
         if(window.DailyData.packs) window.DailyData.packs.forEach(i => previewItems.add(i.id));
@@ -108,30 +151,71 @@ class BootScene extends Phaser.Scene {
         if(window.OwnedAssets.packs) window.OwnedAssets.packs.forEach(i => previewItems.add(i.id));
         if(window.OwnedAssets.skins) window.OwnedAssets.skins.forEach(i => previewItems.add(i.id));
 
-        previewItems.forEach(id => {
-            if (id !== 'default') this.load.image(`preview_${id}`, `assets/images/${id}.png`);
-        });
+        previewItems.forEach(id => { if (id !== 'default') this.load.image(`preview_${id}`, `assets/images/${id}.png`); });
 
-        // 2. טוען את תמונות הרקע המלאות שקנינו
-        window.OwnedAssets.bgs.forEach(bg => {
-            if (bg.id !== 'default' && bg.image) this.load.image(bg.id, bg.image);
-        });
-        
-        // 3. טוען את כיווני התנועה *רק לסקינים שקנינו* כדי שהלוקר יחליף ביניהם חלק
+        window.OwnedAssets.bgs.forEach(bg => { if (bg.id !== 'default' && bg.image) this.load.image(bg.id, bg.image); });
         window.OwnedAssets.skins.forEach(skin => {
-            if (!skin.isDefault && skin.dirs) {
-                skin.dirs.forEach((dirImg, index) => { this.load.image(`${skin.id}_${index}`, dirImg); });
-            }
+            if (!skin.isDefault && skin.dirs) skin.dirs.forEach((dirImg, index) => { this.load.image(`${skin.id}_${index}`, dirImg); });
         });
 
-        // 4. טוען את טקסטורות הסביבה רק של מה שמולבש כרגע
         const currentPack = window.OwnedAssets.packs.find(p => p.id === window.PlayerData.currentPack);
         if (currentPack && currentPack.textures) {
             if (currentPack.textures.floor) this.load.image('custom_floor', currentPack.textures.floor);
             if (currentPack.textures.wall) this.load.image('custom_wall', currentPack.textures.wall);
         }
 
-        this.load.once('complete', () => { this.scene.start('LobbyScene', { direction: 'right' }); });
+        // מחבר את מד ההתקדמות האמיתי של פייזר
+        this.load.on('progress', (value) => {
+            clearInterval(progressInterval);
+            barFill.clear().fillStyle(0x00E5FF, 1).fillRoundedRect(this.scale.width/2 - 250, this.scale.height/2 + 220, 500 * (0.8 + value*0.2), 12, 6);
+        });
+
+        this.load.once('complete', () => { 
+            // ==============================================
+            // 🔥 THE MARVEL CLIMAX (FLASH & LOGO SLAM) 🔥
+            // ==============================================
+            clearInterval(progressInterval);
+            loadingText.destroy();
+            barBg.destroy();
+            barFill.destroy();
+            this.haloRing.destroy();
+            particles.destroy();
+
+            // המשאבים נטענו - עכשיו נריץ אותם מהר כמו קומיקס
+            const keysToFlash = ['tex_floor', 'tex_wall', 'tex_bridge', 'tex_crystal', 'tex_trap_off'];
+            let flashImage = this.add.image(this.scale.width/2, this.scale.height/2, keysToFlash[0]).setDisplaySize(this.scale.width, this.scale.height).setAlpha(0.2).setBlendMode('ADD');
+
+            let flipCount = 0;
+            const flipInterval = setInterval(() => {
+                flipCount++;
+                let nextKey = keysToFlash[flipCount % keysToFlash.length];
+                if (this.textures.exists(nextKey)) flashImage.setTexture(nextKey);
+                
+                if (flipCount > 18) { // אחרי כמעט שנייה של הבהובים סופר-מהירים
+                    clearInterval(flipInterval);
+                    flashImage.destroy();
+                    
+                    // פלאש לבן ומסנוור ששוטף את המסך!
+                    const flashWhite = this.add.graphics().fillStyle(0xFFFFFF, 1).fillRect(0, 0, this.scale.width, this.scale.height).setDepth(9999);
+                    this.cameras.main.shake(400, 0.02); // רעידת מסך דרמטית
+                    
+                    // טריקת לוגו מאסיבית פנימה
+                    let title = this.add.text(this.scale.width/2, this.scale.height/2, 'THE HIDDEN\nPATH', { 
+                        fontFamily: '"Arial Black", sans-serif', fontSize: '130px', fill: '#FFFFFF', fontStyle: 'bold', align: 'center', stroke: '#00E5FF', strokeThickness: 15 
+                    }).setOrigin(0.5).setScale(4).setDepth(10000);
+                    title.setShadow(0, 0, '#00E5FF', 30);
+                    
+                    this.tweens.add({ targets: flashWhite, alpha: 0, duration: 800, ease: 'Cubic.easeOut' });
+                    this.tweens.add({ targets: title, scale: 1, duration: 300, ease: 'Back.easeOut', easeParams: [1.5] });
+                    
+                    // משאיר את הלוגו המרשים באוויר לשנייה, ואז עובר ללובי
+                    this.time.delayedCall(1600, () => {
+                        this.scene.start('LobbyScene', { direction: 'right' });
+                    });
+                }
+            }, 50); // מתחלף כל 50 אלפיות השנייה (מונטאז' אגרסיבי)
+        });
+        
         this.load.start();
     }
 }
@@ -796,6 +880,16 @@ class GameScene extends Phaser.Scene {
         this.createTrashButton();
         this.createTooltipSystem();
         this.setupBoardInteraction();
+
+        // --- UI להולוגרמה ---
+        this.hologramOverlay = this.add.graphics();
+        this.hologramOverlay.fillStyle(0x00E5FF, 0.15); // צבע תכלת עדין על כל המסך
+        this.hologramOverlay.fillRect(0, 0, this.scale.width, this.scale.height);
+        this.hologramOverlay.setDepth(9998);
+        this.hologramOverlay.setAlpha(0); // מוסתר כברירת מחדל
+        
+        this.hologramText = this.add.text(this.scale.width / 2, 250, '[ HOLOGRAM PREVIEW ]', { fontFamily: this.comicFont, fontSize: '50px', fill: '#00E5FF', fontStyle: 'bold', stroke: '#000000', strokeThickness: 8, letterSpacing: 5 }).setOrigin(0.5).setDepth(9999).setAlpha(0);
+        // ---------------------
         
         this.input.on('dragstart', (pointer, gameObject) => {
             if (this.isPlaying) return;
@@ -915,8 +1009,7 @@ class GameScene extends Phaser.Scene {
 
                     let topColor, sideColor, textureKey = null;
 
-                    if (isExternalWall) { topColor = this.currentBiome.wall; sideColor = this.currentBiome.wallDark; textureKey = 'tex_wall'; } 
-                    else if (tileType === 9) { topColor = '#FFD54F'; sideColor = '#FFB300'; textureKey = 'tex_exit'; } 
+                    if (isExternalWall) { topColor = this.currentBiome.wall; sideColor = this.currentBiome.wallDark; textureKey = this.textures.exists('custom_wall') ? 'custom_wall' : 'tex_wall'; }                    else if (tileType === 9) { topColor = '#FFD54F'; sideColor = '#FFB300'; textureKey = 'tex_exit'; } 
                     else if (isWater) { 
                         this.waterMask.moveTo(tl.x, tl.y); this.waterMask.lineTo(tr.x, tr.y);
                         this.waterMask.lineTo(br.x, br.y); this.waterMask.lineTo(bl.x, bl.y);
@@ -930,10 +1023,10 @@ class GameScene extends Phaser.Scene {
                     let strokeGfx = this.add.graphics(); strokeGfx.setDepth(baseRowDepth + 1.5); strokeGfx.lineStyle(5, 0x000000, 1);
 
                     if (height > baseHeight && !isWater) {
-                        if ((tileType === 1 || isExternalWall) && this.textures.exists('tex_wall')) {
+                        if ((tileType === 1 || isExternalWall) && this.textures.exists(textureKey)) {
                             let sidePts = [bl, br, base_br, base_bl];
-                            let sideCutKey = `tex_wall_side_c${col}_r${row}_h${height}_b${baseHeight}`;
-                            let sideFinalKey = this.createMaskedTexture('tex_wall', sidePts, sideCutKey);
+                            let sideCutKey = `${textureKey}_side_c${col}_r${row}_h${height}_b${baseHeight}`;
+                            let sideFinalKey = this.createMaskedTexture(textureKey, sidePts, sideCutKey);
                             if (sideFinalKey) {
                                 let minX = Math.min(...sidePts.map(p=>p.x)), maxX = Math.max(...sidePts.map(p=>p.x));
                                 let minY = Math.min(...sidePts.map(p=>p.y)), maxY = Math.max(...sidePts.map(p=>p.y));
@@ -1113,8 +1206,14 @@ class GameScene extends Phaser.Scene {
         if (this.isPlaying) return;
         this.cameras.main.shake(100, 0.005);
         
+        // מדליק את תצוגת מסך ההולוגרמה
+        this.tweens.add({ targets: [this.hologramOverlay, this.hologramText], alpha: 1, duration: 200 });
+        
         if (this.bridgeLogic) {
-            let bPos = this.bridgeLogic.initialPos; let bDir = this.bridgeLogic.initialDir; let bTimer = 1;
+            // התיקון: מחשב החל מהמיקום העכשווי של הגשר!
+            let bPos = this.bridgeLogic.axis === 'x' ? this.bridgeLogic.x : this.bridgeLogic.y; 
+            let bDir = this.bridgeLogic.dir; 
+            let bTimer = this.bridgeLogic.pauseTimer;
             for(let i = 0; i < steps; i++) {
                 if (bTimer > 0) bTimer--;
                 else { bPos += bDir; if (bPos >= this.bridgeLogic.max || bPos <= this.bridgeLogic.min) bDir *= -1; bTimer = 1; }
@@ -1123,13 +1222,15 @@ class GameScene extends Phaser.Scene {
             this.bridgeVisualY = this.bridgeLogic.axis === 'y' ? bPos : this.bridgeLogic.y;
             
             this.bridgeObj.gfx.setAlpha(0.5); 
-            if (this.bridgeObj.img) this.bridgeObj.img.setTint(0x00E5FF); // התיקון: צובעים רק את התמונה!
+            if (this.bridgeObj.img) this.bridgeObj.img.setTint(0x00E5FF);
         }
 
-        let trapsFlipped = false; let tTimer = 1;
+        let trapsFlipped = false; let tTimer = this.trapTimer; // מחשב מהטיימר העכשווי!
         for (let i = 0; i < steps; i++) { if (tTimer > 0) tTimer--; else { trapsFlipped = !trapsFlipped; tTimer = 1; } }
         this.spikeTraps.forEach(trap => {
-            trap.active = trapsFlipped ? !trap.initialActive : trap.initialActive;
+            // התיקון: שומר גיבוי של הסטטוס האמיתי הנוכחי, ואז מחליף אותו זמנית
+            trap.backupActive = trap.active; 
+            trap.active = trapsFlipped ? !trap.backupActive : trap.backupActive;
             let key = `${trap.x}_${trap.y}`;
             if (this.trapObjects[key]) this.trapObjects[key].spikeGfx.setAlpha(0.5);
         });
@@ -1139,14 +1240,18 @@ class GameScene extends Phaser.Scene {
 
     resetHologram() {
         if (this.isPlaying) return;
+        
+        // מכבה את תצוגת ההולוגרמה
+        this.tweens.add({ targets: [this.hologramOverlay, this.hologramText], alpha: 0, duration: 200 });
+
         if (this.bridgeLogic) {
             this.bridgeVisualX = this.bridgeLogic.x; this.bridgeVisualY = this.bridgeLogic.y;
-            
             this.bridgeObj.gfx.setAlpha(1); 
-            if (this.bridgeObj.img) this.bridgeObj.img.clearTint(); // התיקון: מנקים רק מהתמונה!
+            if (this.bridgeObj.img) this.bridgeObj.img.clearTint(); 
         }
         this.spikeTraps.forEach(trap => {
-            trap.active = trap.initialActive;
+            // מחזיר את הסטטוס מהגיבוי המדויק
+            if (trap.backupActive !== undefined) trap.active = trap.backupActive; 
             let key = `${trap.x}_${trap.y}`;
             if (this.trapObjects[key]) this.trapObjects[key].spikeGfx.setAlpha(1);
         });

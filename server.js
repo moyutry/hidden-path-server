@@ -286,7 +286,10 @@ function getTodayShopAndLevel() {
     const level = new ServerLevelGenerator();
     dailyCache = { 
         levelNumber: dayIndex - 20600, mapData: level.mapData, spikeTraps: level.spikeTraps, crystalsLogic: level.crystalsLogic, bridgeLogic: level.bridgeLogic, parScore: level.parScore,
-        bgs: getItems(config.bgs, 6, 100), packs: getItems(config.packs, 6, 200), skins: getItems(config.skins, 6, 300)
+        // התיקון: הפעלת פילטר כדי שפריטי Default לא יגיעו לחנות בכלל
+        bgs: getItems(config.bgs.filter(b => !b.isDefault), 6, 100), 
+        packs: getItems(config.packs.filter(p => !p.isDefault), 6, 200), 
+        skins: getItems(config.skins.filter(s => !s.isDefault), 6, 300)
     };
     lastDay = dayIndex; return dailyCache;
 }
@@ -544,8 +547,18 @@ app.post('/api/equip', authenticateUser, async (req, res) => {
 // ירידת חיים מאובטחת
 app.post('/api/lose_life', authenticateUser, async (req, res) => {
     let player = await User.findOne({ discordId: req.discordId });
+    const todayData = getTodayShopAndLevel();
+    
+    // מוודא שאם התחלף יום, הוא מקבל מיד 5 חיים חזרה לפני ההורדה!
+    if (player.lastPlayedDay !== todayData.levelNumber) {
+        player.triesLeft = 5;
+        player.lastPlayedDay = todayData.levelNumber;
+    }
+
     if (player.triesLeft <= 0) return res.status(400).send("No lives");
-    player.triesLeft--; await player.save();
+    player.triesLeft--; 
+    await player.save();
+    
     res.json({ triesLeft: player.triesLeft });
 });
 
